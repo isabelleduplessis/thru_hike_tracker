@@ -2,16 +2,30 @@
 class Trail{
   final DateTime startDate; // Corresponds to the 'Start Date' column
   final String trail; // Corresponds to the 'Trail' column
-  final String trailDirection; // Corresponds to the 'Trail Direction' column (E.g. NOBO, SOBO)
+  final String initialDirection; // Corresponds to the 'Trail Direction' column (E.g. NOBO, SOBO, EABO, WEBO)
+  final List<TrailSection> sections; // Sections loaded from database
   final List<CoreDataEntry> entries; // List of CoreDataEntry objects where each is an instance of the CoreDataEntry class
   final List <AlternateRoute>? alternates; // List of AlternateRoute objects where each is an instance of the AlternateRoute class
 
   Trail({
     required this.startDate,
     required this.trail,
-    required this.trailDirection,
+    required this.initialDirection,
+    required this.sections,
     required this.entries,
     this.alternates,
+  });
+}
+
+class TrailSection { // get trail sections from database
+  final String sectionName;
+  final double startMarker;
+  final double endMarker;
+
+  TrailSection({
+    required this.sectionName,
+    required this.startMarker,
+    required this.endMarker,
   });
 }
 
@@ -37,14 +51,12 @@ class CoreDataEntry{
   final DateTime currentDate;     // Corresponds to the 'Current Date' column
   final double start;      // Corresponds to the 'Start' column where value is a measure of distance
   final double end;        // Corresponds to the 'End' column where value is a measure of distance
-  final ElevationChange? elevationChange;  // Reference to ElevationChange object
   final Trail trail;    // Reference to the Trail object
 
   CoreDataEntry({
     required this.currentDate,
     required this.start,
     required this.end,
-    this.elevationChange,
     required this.trail,
   });
 
@@ -53,9 +65,29 @@ class CoreDataEntry{
   // Getter for the distance covered on this day
   double get distance => end - start;
 
-  // Getter for the total elevation change on this day
-  double get totalElevationChange { 
-    return (elevationChange?.elevationGain ?? 0.0) - (elevationChange?.elevationLoss ?? 0.0);
+  // Function to reverse direction (if needed)
+  String reverseDirection(String direction) {
+    switch (direction.toLowerCase()) {
+      case "nobo":
+        return "SOBO";
+      case "sobo":
+        return "NOBO";
+      case "eabo":
+        return "WEBO";
+      case "webo":
+        return "EABO";
+      default:
+        throw Exception("Invalid trail direction");
+    }
+  }
+
+  // Function to calculate direction based on mileage difference
+  String calculateDirection(double distance, Trail trail) {
+    if (distance > 0) {
+      return trail.initialDirection; // Matches the initial direction
+    } else {
+      return reverseDirection(trail.initialDirection);
+    }
   }
 
   // Getter for the day number on the trail
@@ -63,10 +95,8 @@ class CoreDataEntry{
     // Calculate the difference in days between the start date of the trail and the current date
     return currentDate.difference(trail.startDate).inDays + 1;  // +1 to start counting from Day 1
   }
+
 }
-
-
-
 
 // To be used for sidequests (additional miles), alternates (additional and skipped miles), and closures (skipped miles)
 // These will be stored at the Trail level
@@ -74,6 +104,14 @@ class AlternateRoute{
   final String? name; // Corresponds to the 'Name' column
   final double? distanceAdded; // Corresponds to the 'Distance Added' column where value is a measure of distance
   final double? distanceSkipped; // Corresponds to the 'Distance Skipped' column where value is a measure of distance
+
+  /*
+  Examples:
+  name: Kearsarge Pass Trail, Eagle Creek Alternate, William's Mine Fire Closure
+  distanceAdded: 7.8, 15.5, 0.0
+  distanceSkipped: 0.0, 19.0, 22.0
+
+  */
 
   AlternateRoute({
     this.name,
@@ -102,6 +140,11 @@ class ElevationChange{ // Both are entered as positive values
     this.elevationGain,
     this.elevationLoss,
   });
+
+  // Getter for the net elevation change on this day
+  double get totalElevationChange { 
+    return (elevationGain ?? 0.0) - (elevationLoss ?? 0.0);
+  }
 }
 
 class BonusInfo{
@@ -129,8 +172,8 @@ class BonusInfo{
 /* NEXT STEPS
 * Work on trail section sql databases
 * work on section of trail calculations for each day
-* nero calculations for each day
-* direciton for each day
+* nero calculations for each day - add this later
+* direction for each day - done
 
 
 
@@ -139,10 +182,10 @@ class BonusInfo{
 
 /* calculated for each day
 * section of trail
-* direction
+* direction - DONE
 * day # - DONE
 *distance - DONE
-*zero/nero
+*zero/nero - add this later
 */
 
 /* Calculated for whole trail
@@ -158,3 +201,10 @@ class BonusInfo{
 * number of wildlife sightings
 * number of zeros/neros
 */
+
+
+// have an option in settings to set nero threshold
+
+// consider adding campfires, number of hitches, CUSTOM FIELDS FOR PEOPLE TO TRACK
+
+// maybe for now I don't need towns
