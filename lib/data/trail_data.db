@@ -3,19 +3,7 @@
 CREATE TABLE Trails (
   trailId TEXT PRIMARY KEY, -- Identifies the trail (e.g., 'PCT' for Pacific Crest Trail)
   trailName TEXT, -- Full trail name (Pacific Crest Trail)
-  totalMiles REAL -- Default total length of trail
+  trailType TEXT, -- Trail type (Hike or Bike)
+  trailLength REAL -- Length of trail in miles
 );
 
-
-CREATE TABLE TrailLocations (
-  id INTEGER PRIMARY KEY,
-  trailId TEXT,           -- Identifies the trail (e.g., 'PCT' for Pacific Crest Trail)
-  sectionName TEXT,       -- The section of the trail (Southern California, Northern California, etc.)
-  locationName TEXT,          -- The town's name
-  locationMarker REAL     -- The mile marker for the town
-  FOREIGN KEY (trailId) REFERENCES Trails(trailId)  -- Enforces referential integrity
-);
-
--- Insert Pacific Crest Trail data into Trails table
-INSERT INTO Trails (trailId, trailName, totalMiles)
-VALUES ('PCT', 'Pacific Crest Trail', 2653.0);

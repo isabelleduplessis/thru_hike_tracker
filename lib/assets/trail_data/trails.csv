@@ -1,0 +1,17 @@
+trailId,trailName,trailType,trailLength
+PCT,Pacific Crest Trail,Hike,2655
+CT,Colorado Trail,Hike,486
+CDT,Continental Divide Trail,Hike,3050
+AT,Appalachian Trail,Hike,2197
+AZT,Arizona Trail,Hike,814
+PNT,Pacific Northwest Trail,Hike,1249
+LT,Long Trail,Hike,271
+CL,Collegiate Loop,Hike,161
+FT,Florida Trail,Hike,1409
+GDT,Great Divide Trail,Hike,698
+JMT,John Muir Trail,Hike,210
+CTBR,Colorado Trail Bike Route,Bike,540
+TA,Te Araroa,Hike,1882
+PT,Pinhoti Trail,Hike,351
+BMT,Benton Mackaye Trail,Hike,290
+IAT,Ice Age Trail,Hike,1145

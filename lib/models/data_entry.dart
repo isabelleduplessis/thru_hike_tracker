@@ -30,21 +30,69 @@ class TrailSection { // get trail sections from database
 }
 
 // FullDataEntry class to represent a single row in the dataset corresponding to a single day on the trail
+// Consider adding ID number for each entry
 class FullDataEntry{
+  final int? id;
   final CoreDataEntry coreDataEntry; // Corresponds to the CoreDataEntry object
   final List <AlternateRoute>? alternates; // List of AlternateRoute objects because there can be multiple alternates for a single day
   final Camp? camp; // Corresponds to the Camp object
   final ElevationChange? elevationChange; // Corresponds to the ElevationChange object
   final BonusInfo? bonusInfo; // Corresponds to the BonusInfo object
 
-  FullDataEntry({
+  FullDataEntry({ // Do I need tout const before this?
+    this.id,
     required this.coreDataEntry,
     this.alternates,
     this.camp,
     this.elevationChange,
     this.bonusInfo,
   });
+
+  // Create fromJson method
+  factory FullDataEntry.fromJson(Map<String,dynamic> json) {
+    return FullDataEntry(
+      id: json['id'],
+      coreDataEntry: CoreDataEntry(
+        currentDate: DateTime.parse(json['currentDate']),
+        start: json['start'],
+        end: json['end'],
+        trail: Trail(
+          startDate: DateTime.parse(json['startDate']),
+          trail: json['trail'],
+          initialDirection: json['initialDirection'],
+          sections: json['sections'],
+          entries: json['entries'],
+          alternates: json['alternates'],
+        ),
+      ),
+      alternates: json['alternates'],
+      camp: json['camp'],
+      elevationChange: json['elevationChange'],
+      bonusInfo: json['bonusInfo'],
+    );
+  }
+
+  // create toJson method
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'currentDate': coreDataEntry.currentDate.toIso8601String(),
+      'start': coreDataEntry.start,
+      'end': coreDataEntry.end,
+      'trail': coreDataEntry.trail.trail,
+      'initialDirection': coreDataEntry.trail.initialDirection,
+      'sections': coreDataEntry.trail.sections,
+      'entries': coreDataEntry.trail.entries,
+      'alternates': alternates,
+      'camp': camp,
+      'elevationChange': elevationChange,
+      'bonusInfo': bonusInfo,
+    };
+  }
+
 }
+
+
 
 // Minimum required fields for an entry
 class CoreDataEntry{
@@ -169,6 +217,9 @@ class BonusInfo{
 
 
 
+/// Daily entries should be complete for now
+/// Still need to do whole trail calculations
+
 /* NEXT STEPS
 * Work on trail section sql databases
 * work on section of trail calculations for each day
@@ -181,7 +232,7 @@ class BonusInfo{
 
 
 /* calculated for each day
-* section of trail
+* section of trail - add this later
 * direction - DONE
 * day # - DONE
 *distance - DONE
@@ -207,4 +258,4 @@ class BonusInfo{
 
 // consider adding campfires, number of hitches, CUSTOM FIELDS FOR PEOPLE TO TRACK
 
-// maybe for now I don't need towns
+// maybe for now I don't need towns - no you don't yet
