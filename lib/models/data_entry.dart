@@ -1,22 +1,7 @@
-// Trail information consistent across all entries
-class Trail{
-  final DateTime startDate; // Corresponds to the 'Start Date' column
-  final String trail; // Corresponds to the 'Trail' column
-  final String initialDirection; // Corresponds to the 'Trail Direction' column (E.g. NOBO, SOBO, EABO, WEBO)
-  final List<TrailSection> sections; // Sections loaded from database
-  final List<CoreDataEntry> entries; // List of CoreDataEntry objects where each is an instance of the CoreDataEntry class
-  final List <AlternateRoute>? alternates; // List of AlternateRoute objects where each is an instance of the AlternateRoute class
+import 'trail_journal.dart';
 
-  Trail({
-    required this.startDate,
-    required this.trail,
-    required this.initialDirection,
-    required this.sections,
-    required this.entries,
-    this.alternates,
-  });
-}
-
+/*
+Still TBD if I want to include trail section right now
 class TrailSection { // get trail sections from database
   final String sectionName;
   final double startMarker;
@@ -27,19 +12,36 @@ class TrailSection { // get trail sections from database
     required this.startMarker,
     required this.endMarker,
   });
+
+  factory TrailSection.fromJson(Map<String, dynamic> json) {
+    return TrailSection(
+      sectionName: json['sectionName'],
+      startMarker: json['startMarker'],
+      endMarker: json['endMarker'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'sectionName': sectionName,
+      'startMarker': startMarker,
+      'endMarker': endMarker,
+    };
+  }
 }
+*/
 
 // FullDataEntry class to represent a single row in the dataset corresponding to a single day on the trail
 // Consider adding ID number for each entry
-class FullDataEntry{
+class FullDataEntry {
   final int? id;
-  final CoreDataEntry coreDataEntry; // Corresponds to the CoreDataEntry object
-  final List <AlternateRoute>? alternates; // List of AlternateRoute objects because there can be multiple alternates for a single day
-  final Camp? camp; // Corresponds to the Camp object
-  final ElevationChange? elevationChange; // Corresponds to the ElevationChange object
-  final BonusInfo? bonusInfo; // Corresponds to the BonusInfo object
+  final CoreDataEntry coreDataEntry;
+  final List<AlternateRoute>? alternates;
+  final Camp? camp;
+  final ElevationChange? elevationChange;
+  final BonusInfo? bonusInfo;
 
-  FullDataEntry({ // Do I need tout const before this?
+  FullDataEntry({
     this.id,
     required this.coreDataEntry,
     this.alternates,
@@ -48,49 +50,37 @@ class FullDataEntry{
     this.bonusInfo,
   });
 
-  // Create fromJson method
-  factory FullDataEntry.fromJson(Map<String,dynamic> json) {
+  factory FullDataEntry.fromJson(Map<String, dynamic> json) {
     return FullDataEntry(
       id: json['id'],
-      coreDataEntry: CoreDataEntry(
-        currentDate: DateTime.parse(json['currentDate']),
-        start: json['start'],
-        end: json['end'],
-        trail: Trail(
-          startDate: DateTime.parse(json['startDate']),
-          trail: json['trail'],
-          initialDirection: json['initialDirection'],
-          sections: json['sections'],
-          entries: json['entries'],
-          alternates: json['alternates'],
-        ),
-      ),
-      alternates: json['alternates'],
-      camp: json['camp'],
-      elevationChange: json['elevationChange'],
-      bonusInfo: json['bonusInfo'],
+      coreDataEntry: CoreDataEntry.fromJson(json['coreDataEntry']),
+      alternates: json['alternates'] != null
+          ? (json['alternates'] as List<dynamic>)
+              .map((alt) => AlternateRoute.fromJson(alt))
+              .toList()
+          : null,
+      camp: json['camp'] != null ? Camp.fromJson(json['camp']) : null,
+      elevationChange: json['elevationChange'] != null
+          ? ElevationChange.fromJson(json['elevationChange'])
+          : null,
+      bonusInfo: json['bonusInfo'] != null
+          ? BonusInfo.fromJson(json['bonusInfo'])
+          : null,
     );
   }
 
-  // create toJson method
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'currentDate': coreDataEntry.currentDate.toIso8601String(),
-      'start': coreDataEntry.start,
-      'end': coreDataEntry.end,
-      'trail': coreDataEntry.trail.trail,
-      'initialDirection': coreDataEntry.trail.initialDirection,
-      'sections': coreDataEntry.trail.sections,
-      'entries': coreDataEntry.trail.entries,
-      'alternates': alternates,
-      'camp': camp,
-      'elevationChange': elevationChange,
-      'bonusInfo': bonusInfo,
+      'coreDataEntry': coreDataEntry.toJson(),
+      'alternates': alternates?.map((alt) => alt.toJson()).toList(),
+      'camp': camp?.toJson(),
+      'elevationChange': elevationChange?.toJson(),
+      'bonusInfo': bonusInfo?.toJson(),
     };
   }
-
 }
+
 
 
 
@@ -99,14 +89,32 @@ class CoreDataEntry{
   final DateTime currentDate;     // Corresponds to the 'Current Date' column
   final double start;      // Corresponds to the 'Start' column where value is a measure of distance
   final double end;        // Corresponds to the 'End' column where value is a measure of distance
-  final Trail trail;    // Reference to the Trail object
+  final TrailJournal trailJournal;    // Reference to the TrailJournal object
 
   CoreDataEntry({
     required this.currentDate,
     required this.start,
     required this.end,
-    required this.trail,
+    required this.trailJournal,
   });
+
+  factory CoreDataEntry.fromJson(Map<String, dynamic> json) {
+    return CoreDataEntry(
+      currentDate: DateTime.parse(json['currentDate']),
+      start: json['start'],
+      end: json['end'],
+      trailJournal: TrailJournal.fromJson(json['trailJournal']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'currentDate': currentDate.toIso8601String(),
+      'start': start,
+      'end': end,
+      'trailJournal': trailJournal.toJson(),
+    };
+  }
 
   // Day-level calculations:
 
@@ -130,18 +138,18 @@ class CoreDataEntry{
   }
 
   // Function to calculate direction based on mileage difference
-  String calculateDirection(double distance, Trail trail) {
+  String calculateDirection(double distance, TrailJournal trailJournal) {
     if (distance > 0) {
-      return trail.initialDirection; // Matches the initial direction
+      return trailJournal.initialDirection; // Matches the initial direction
     } else {
-      return reverseDirection(trail.initialDirection);
+      return reverseDirection(trailJournal.initialDirection);
     }
   }
 
   // Getter for the day number on the trail
   int get trailDayNumber {
     // Calculate the difference in days between the start date of the trail and the current date
-    return currentDate.difference(trail.startDate).inDays + 1;  // +1 to start counting from Day 1
+    return currentDate.difference(trailJournal.startDate).inDays + 1;  // +1 to start counting from Day 1
   }
 
 }
@@ -166,6 +174,24 @@ class AlternateRoute{
     this.distanceAdded,
     this.distanceSkipped,
   });
+
+  // Factory constructor to create an instance of AlternateRoute from a JSON object
+  factory AlternateRoute.fromJson(Map<String, dynamic> json) {
+    return AlternateRoute(
+      name: json['name'],
+      distanceAdded: (json['distanceAdded'] as num?)?.toDouble(),
+      distanceSkipped: (json['distanceSkipped'] as num?)?.toDouble(),
+    );
+  }
+
+  // Method to convert an AlternateRoute instance to a JSON object
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'distanceAdded': distanceAdded,
+      'distanceSkipped': distanceSkipped,
+    };
+  }
 }
 
 class Camp{
@@ -178,6 +204,24 @@ class Camp{
     this.endLocation,
     this.campType,
   });
+
+  // Method to convert a Camp instance to a JSON object
+  Map<String, dynamic> toJson() {
+    return {
+      'startLocation': startLocation,
+      'endLocation': endLocation,
+      'campType': campType,
+    };
+  }
+
+  // Method to create an instance of Camp from a JSON object
+  factory Camp.fromJson(Map<String, dynamic> json) {
+    return Camp(
+      startLocation: json['startLocation'],
+      endLocation: json['endLocation'],
+      campType: json['campType'],
+    );
+  }
 }
 
 class ElevationChange{ // Both are entered as positive values
@@ -192,6 +236,22 @@ class ElevationChange{ // Both are entered as positive values
   // Getter for the net elevation change on this day
   double get totalElevationChange { 
     return (elevationGain ?? 0.0) - (elevationLoss ?? 0.0);
+  }
+
+  // Method to convert an ElevationChange instance to a JSON object
+  Map<String, dynamic> toJson() {
+    return {
+      'elevationGain': elevationGain,
+      'elevationLoss': elevationLoss,
+    };
+  }
+
+  // Method to create an instance of ElevationChange from a JSON object
+  factory ElevationChange.fromJson(Map<String, dynamic> json) {
+    return ElevationChange(
+      elevationGain: (json['elevationGain'] as num?)?.toDouble(),
+      elevationLoss: (json['elevationLoss'] as num?)?.toDouble(),
+    );
   }
 }
 
@@ -213,6 +273,34 @@ class BonusInfo{
     this.shoes,
     this.trailMagic,
   });
+
+  // Method to convert a BonusInfo instance to a JSON object
+  Map<String, dynamic> toJson() {
+    return {
+      'notes': notes,
+      'wildlife': wildlife,
+      'resupply': resupply,
+      'townDay': townDay,
+      'shower': shower,
+      'shoes': shoes,
+      'trailMagic': trailMagic,
+    };
+  }
+
+  // Method to create an instance of BonusInfo from a JSON object
+  factory BonusInfo.fromJson(Map<String, dynamic> json) {
+    return BonusInfo(
+      notes: json['notes'],
+      wildlife: json['wildlife'] != null
+          ? Map<String, int>.from(json['wildlife'])
+          : null,
+      resupply: json['resupply'],
+      townDay: json['townDay'],
+      shower: json['shower'],
+      shoes: json['shoes'],
+      trailMagic: json['trailMagic'],
+    );
+  }
 }
 
 
