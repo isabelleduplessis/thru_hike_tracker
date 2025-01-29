@@ -1,3 +1,4 @@
+// Work on database schema!!! how is everything related??
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:thru_hike_tracker/models/data_entry.dart';
@@ -24,8 +25,15 @@ class DatabaseHelper {
     _database = await openDatabase(
       join(await getDatabasesPath(), _dbName),
       onCreate: (db, version) async {
-        return db.execute(
-            "CREATE TABLE FullDataEntry(id INTEGER PRIMARY KEY, current_date TEXT, start REAL, end REAL, trailName TEXT)");
+
+        // Full data entry table
+        await db.execute(
+            "CREATE TABLE FullDataEntry(id INTEGER PRIMARY KEY, current_date TEXT, start REAL, end REAL, trailName TEXT)"
+        );
+        // Create TrailJournal table
+        await db.execute(
+            "CREATE TABLE TrailJournal(id INTEGER PRIMARY KEY, trailName TEXT, startDate TEXT, direction TEXT, trailType TEXT, length REAL)"
+        );
       },
       version: _version,
     );

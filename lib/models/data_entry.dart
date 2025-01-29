@@ -121,30 +121,6 @@ class CoreDataEntry{
   // Getter for the distance covered on this day
   double get distance => end - start;
 
-  // Function to reverse direction (if needed)
-  String reverseDirection(String direction) {
-    switch (direction.toLowerCase()) {
-      case "nobo":
-        return "SOBO";
-      case "sobo":
-        return "NOBO";
-      case "eabo":
-        return "WEBO";
-      case "webo":
-        return "EABO";
-      default:
-        throw Exception("Invalid trail direction");
-    }
-  }
-
-  // Function to calculate direction based on mileage difference
-  String calculateDirection(double distance, TrailJournal trailJournal) {
-    if (distance > 0) {
-      return trailJournal.initialDirection; // Matches the initial direction
-    } else {
-      return reverseDirection(trailJournal.initialDirection);
-    }
-  }
 
   // Getter for the day number on the trail
   int get trailDayNumber {
@@ -263,6 +239,7 @@ class BonusInfo{
   final int? shower; // Corresponds to the 'Shower' column where 1 indicates a shower taken and 0 indicates no shower taken
   final String? shoes; // Corresponds to the 'Shoes' column
   final int? trailMagic; // Corresponds to the 'Trail Magic' column where value is the number of trail magics experienced
+  final Map<String, dynamic> customFields; // Custom fields
 
   BonusInfo({
     this.notes,
@@ -272,7 +249,8 @@ class BonusInfo{
     this.shower,
     this.shoes,
     this.trailMagic,
-  });
+    Map<String, dynamic>? customFields,
+  }) : customFields = customFields ?? {}; // Ensure it's initialized
 
   // Method to convert a BonusInfo instance to a JSON object
   Map<String, dynamic> toJson() {

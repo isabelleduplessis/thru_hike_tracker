@@ -35,17 +35,19 @@ enum TrailDirection { // referring to where they want mile 0 to start and what d
 
 class TrailJournal{
   final int? id;
-  final DateTime startDate; // Corresponds to the 'Start Date' column
   final String trailName; // Corresponds to the 'Trail Name' column
-  final String initialDirection; // Corresponds to the 'Trail Direction' column (E.g. NOBO, SOBO, EABO, WEBO)
+  final DateTime startDate; // Corresponds to the 'Start Date' column
+  final String startLocation; // Corresponds to the 'Start Location' column
+  final TrailDirection initialDirection; // Corresponds to the 'Trail Direction' column (E.g. NOBO, SOBO, EABO, WEBO)
   //final List<TrailSection> sections; // Sections loaded from database
   final List<CoreDataEntry> entries; // List of CoreDataEntry objects where each is an instance of the CoreDataEntry class
   final List <AlternateRoute>? alternates; // List of AlternateRoute objects where each is an instance of the AlternateRoute class
 
   TrailJournal({
     this.id,
-    required this.startDate,
     required this.trailName,
+    required this.startDate,
+    required this.startLocation,
     required this.initialDirection,
     //required this.sections,
     required this.entries,
@@ -57,7 +59,11 @@ class TrailJournal{
       id: json['id'],
       startDate: DateTime.parse(json['startDate']),
       trailName: json['trailName'],
-      initialDirection: json['initialDirection'],
+      startLocation: json['startLocation'],
+      initialDirection: TrailDirection.values.firstWhere(
+        (e) => e.toString().split('.').last == json['initialDirection'],
+        orElse: () => TrailDirection.noBo, // Default value if missing/invalid
+      ),
       //sections: (json['sections'] as List<dynamic>)
           //.map((section) => TrailSection.fromJson(section))
           //.toList(),
@@ -77,7 +83,8 @@ class TrailJournal{
       'id': id,
       'startDate': startDate.toIso8601String(),
       'trailName': trailName,
-      'initialDirection': initialDirection,
+      'startLocation': startLocation,
+      'initialDirection': initialDirection.toString().split('.').last, // Convert enum to string
       //'sections': sections.map((section) => section.toJson()).toList(),
       'entries': entries.map((entry) => entry.toJson()).toList(),
       'alternates': alternates?.map((alt) => alt.toJson()).toList(),

@@ -2,6 +2,7 @@ enum TrailStructure {
   outAndBack,
   loop,
   pointToPoint,
+  other,
 }
 
 class DefinedTrail{
@@ -18,6 +19,28 @@ class DefinedTrail{
     required this.length,
     required this.structure,
   });
+
+  factory DefinedTrail.fromJson(Map<String, dynamic> json) {
+    return DefinedTrail(
+      id: json['id'] as int?,
+      trailId: json['trailId'] as String?,
+      trailName: json['trailName'] as String,
+      length: json['length'] as double,
+      structure: TrailStructure.values.firstWhere((e) => e.toString() == 'TrailStructure.${json['structure']}',
+        orElse: () => TrailStructure.other, // Fallback to "Other" if missing or invalid
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'trailId': trailId,
+      'trailName': trailName,
+      'length': length,
+      'structure': structure.toString().split('.').last,
+    };
+  }
 }
 
 class CustomTrail {
@@ -34,4 +57,26 @@ class CustomTrail {
     required this.length,
     required this.structure,
   });
+
+  factory CustomTrail.fromJson(Map<String, dynamic> json) {
+    return CustomTrail(
+      id: json['id'] as int?,
+      trailId: json['trailId'] as String?,
+      trailName: json['trailName'] as String,
+      length: json['length'] as double,
+      structure: TrailStructure.values.firstWhere((e) => e.toString() == 'TrailStructure.${json['structure']}',
+        orElse: () => TrailStructure.other, // Fallback to "Other" if missing or invalid
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return{
+      'id': id,
+      'trailId': trailId,
+      'trailName': trailName,
+      'length': length,
+      'structure': structure.toString().split('.').last,
+    };
+  }
 }
