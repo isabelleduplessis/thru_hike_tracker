@@ -1,0 +1,1 @@
+// For operations for each trail journal (calculating stats)
