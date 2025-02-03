@@ -231,24 +231,24 @@ class ElevationChange{ // Both are entered as positive values
   }
 }
 
-class BonusInfo{
+class BonusInfo{ // removing some fields because the user can just create them in custom options
   final String? notes; // Corresponds to the 'Notes' column
   final Map<String, int>? wildlife; // Corresponds to the 'Wildlife' column
-  final String? resupply; // Corresponds to the 'Resupply' column, options being Full, Partial, or None
-  final String? townDay; // Corresponds to the 'Town Day' column, options 1 or 0 where 1 indicates a day spent in town (consider asking about hero or nero)
-  final int? shower; // Corresponds to the 'Shower' column where 1 indicates a shower taken and 0 indicates no shower taken
+  //final String? resupply; // Corresponds to the 'Resupply' column, options being Full, Partial, or None
+  //final String? townDay; // Corresponds to the 'Town Day' column, options 1 or 0 where 1 indicates a day spent in town (consider asking about hero or nero)
+  //final int? shower; // Corresponds to the 'Shower' column where 1 indicates a shower taken and 0 indicates no shower taken
   final String? shoes; // Corresponds to the 'Shoes' column
-  final int? trailMagic; // Corresponds to the 'Trail Magic' column where value is the number of trail magics experienced
+  //final int? trailMagic; // Corresponds to the 'Trail Magic' column where value is the number of trail magics experienced
   final Map<String, dynamic> customFields; // Custom fields
 
   BonusInfo({
     this.notes,
     this.wildlife,
-    this.resupply,
-    this.townDay,
-    this.shower,
+    //this.resupply,
+    //this.townDay,
+    //this.shower,
     this.shoes,
-    this.trailMagic,
+    //this.trailMagic,
     Map<String, dynamic>? customFields,
   }) : customFields = customFields ?? {}; // Ensure it's initialized
 
@@ -257,11 +257,11 @@ class BonusInfo{
     return {
       'notes': notes,
       'wildlife': wildlife,
-      'resupply': resupply,
-      'townDay': townDay,
-      'shower': shower,
+      //'resupply': resupply,
+      //'townDay': townDay,
+      //'shower': shower,
       'shoes': shoes,
-      'trailMagic': trailMagic,
+      //'trailMagic': trailMagic,
     };
   }
 
@@ -272,11 +272,11 @@ class BonusInfo{
       wildlife: json['wildlife'] != null
           ? Map<String, int>.from(json['wildlife'])
           : null,
-      resupply: json['resupply'],
-      townDay: json['townDay'],
-      shower: json['shower'],
+      //resupply: json['resupply'],
+      //townDay: json['townDay'],
+      //shower: json['shower'],
       shoes: json['shoes'],
-      trailMagic: json['trailMagic'],
+      //trailMagic: json['trailMagic'],
     );
   }
 }
