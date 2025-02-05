@@ -1,12 +1,31 @@
 # Thru-Hike Tracker
 
-A new Flutter project.
+Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, view statistics based on daily mileage entries, keep a journal, and update friends and family along the way. Existing hike-tracking apps do not allow users to keep track of on-trail vs off-trail miles, alternate routes, or skips, but Thru-Hike Tracker will allow users to accurately document their hike even when things don't go as planned.
 
 ## Progress Log
 
 ### Day To Day Progress and Goals
+**Feb 4, 2025**
+
+
+Completed:
+* Fixed alternate route data table and model logic to account for multi day alternates and daily alternate entries
+    * Created new file to store alternate route model in
+    * Added option to mark whether a day started or ended on an alternate route
+* Changed day-level calculations to take place in database service since they will be stored and queried
+* Combined optional classes into one for simplicity (data entry model)
+* Created gear/shoe model
+    * Created distinct gear_service.dart file and created all CRUD operations for gear
+
+TODO:
+* Delegate the rest of database_helper.dart tables into separate files with CRUD operations (make alternate service, metadata service)
+    * Think about what would go in user_service.dart. I think it would be used for calculating lifetime stats. Get data from all trail journals
+* Try to test some of the code? VScode says no syntax errors so far
+
 
 **Feb 2, 2025**
+
+
 Completed:
 * Completed initial draft of data tables to be stored (database_helper.dart)
 * Set up structure for creating formulas for user to choose form
@@ -14,10 +33,8 @@ Completed:
 * Removed several bonus info fields from data entries since any users who want those fields can add them as custom
 
 TODO:
-* Separate the different tables & functions into the different files to separate concerns, as database_helper.dart is growing large
-* CRUD operations for each table
-* Define gear/shoe model
-* Add option in alternate route data model for start/end location on this alternate (yes or no)
+* ~~Define gear/shoe model~~
+* ~~Add option in alternate route data model for start/end location on this alternate (yes or no)~~
 
 
 *Began documenting February 2nd, 2025*
@@ -57,7 +74,10 @@ TODO:
 **March 2024**
 * Created spreadsheet to track thru-hike
 * Complexity of spreadsheet inspired idea for thru hike tracker app
-* Set up basic data entry and trail data structure using Python and Streamlit package
+* Set up basic data entry and trail data structure using Python and Streamlit package (in archived thru-hike-tracker repo)
+
+
+.
 
 
 ### Eventual TODOs
@@ -75,7 +95,9 @@ TODO:
 * Allow users to enter past hikes completed without individual daily entries, so they can hike lifetime miles even if they have completed hikes without tracking them daily on this app
 
 **Specific**
-* Need to have option for start/end location to be on the alternate route
+* Create separate files for initial app idea and current progress, just link to them in README
+* onupgrade in case I ever need to adjust schema?
+* ~~Need to have option for start/end location to be on the alternate route~~
 * Get section mile markers for each trail, and determine user's section based on mileage entry
 * Allow user to toggle between imperial and metric
 * User custom fields: Have ideas appear since I'm not explicitly defining them in bonus info anymore (# showers, trail magic, etc)

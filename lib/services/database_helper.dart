@@ -35,44 +35,45 @@ class DatabaseHelper {
             trail_journal_id INTEGER,  -- Foreign key linking to TrailJournal
             current_date TEXT, 
             start REAL, 
-            startLocation TEXT, -- Optional, can be null
+            start_location TEXT, -- Optional, can be null
             end REAL, 
-            endLocation TEXT, -- Optional, can be null
-            trailDistance REAL,
-            distanceAdded REAL, -- Optional, can be null
-            distanceSkipped REAL, -- Optional, can be null
-            netDistance REAL,
-            trailName TEXT),
-            campType TEXT, -- Optional, can be null
-            elevationGain REAL, -- Optional, can be null
-            elevationLoss REAL, -- Optional, can be null
-            netElevation REAL, -- Optional, can be null
+            end_location TEXT, -- Optional, can be null
+            trail_distance REAL, -- Difference between end and start (farout distance)
+            distance_added REAL, -- Optional, can be null *** MAYBE PULL FROM ALTERNATE TABLE?
+            distance_skipped REAL, -- Optional, can be null *** MAYBE PULL FROM ALTERNATE TABLE?
+            net_distance REAL,
+            camp_type TEXT, -- Optional, can be null
+            elevation_gain REAL, -- Optional, can be null
+            elevation_loss REAL, -- Optional, can be null
+            net_elevation REAL, -- Optional, can be null
             shoes TEXT, -- Optional, can be null
             wildlife TEXT, -- Optional, Separate column for wildlife tracking as JSON
-            customFields TEXT,  -- Optional, Stores user-defined fields as JSON
+            custom_fields TEXT,  -- Optional, Stores user-defined fields as JSON
             FOREIGN KEY (trail_journal_id) REFERENCES TrailJournal(id) ON DELETE CASCADE
           )
         ''');
 
-        // Alternate Route table - can have one or more per data entry. A single alternate route can span multiple data entries
         await db.execute('''
-          CREATE TABLE AlternateRoutes ( -- One data entry = one row
+          CREATE TABLE FullDataEntry_AlternateRoutes (
             id INTEGER PRIMARY KEY,
-            full_data_entry_id INTEGER,  -- Foreign key linking to FullDataEntry
-            routeName TEXT,  -- Name of the alternate route (e.g., Kearsarge Pass)
-            distanceAdded REAL,  -- Length of the route
-            distanceSkipped REAL,  -- Length of trail skipped
-            start_date TEXT,  -- When the alternate route started (if it spans multiple days)
-            end_date TEXT,    -- When the alternate route ended (if it spans multiple days)
-            FOREIGN KEY (full_data_entry_id) REFERENCES FullDataEntry(id) ON DELETE CASCADE
+            full_data_entry_id INTEGER,  -- Foreign key linking to FullDataEntry (one per day)
+            alternate_route_id INTEGER,  -- Foreign key linking to AlternateRoutes
+            start_on_alternate INTEGER NOT NULL DEFAULT 0,  -- Whether this day started on the alternate
+            end_on_alternate INTEGER NOT NULL DEFAULT 0,  -- Whether this day ended on the alternate
+            FOREIGN KEY (full_data_entry_id) REFERENCES FullDataEntry(id) ON DELETE CASCADE,
+            FOREIGN KEY (alternate_route_id) REFERENCES AlternateRoutes(id) ON DELETE CASCADE
           )
         ''');
-        // Shoes table
+
         await db.execute('''
-          CREATE TABLE Shoes (
+          CREATE TABLE FullDataEntry_AlternateRoutes (
             id INTEGER PRIMARY KEY,
-            name TEXT,
-            totalMiles REAL  -- Miles covered in these shoes
+            full_data_entry_id INTEGER,  -- Foreign key linking to FullDataEntry (one per day)
+            alternate_route_id INTEGER,  -- Foreign key linking to AlternateRoutes
+            start_on_alternate INTEGER NOT NULL DEFAULT 0,  -- Whether this day started on the alternate
+            end_on_alternate INTEGER NOT NULL DEFAULT 0,  -- Whether this day ended on the alternate
+            FOREIGN KEY (full_data_entry_id) REFERENCES FullDataEntry(id) ON DELETE CASCADE,
+            FOREIGN KEY (alternate_route_id) REFERENCES AlternateRoutes(id) ON DELETE CASCADE
           )
         ''');
         // Create TrailJournal table
