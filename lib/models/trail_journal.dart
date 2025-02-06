@@ -1,5 +1,6 @@
 import 'data_entry.dart';
 import 'alternate_route.dart';
+import 'trail_properties.dart';
 
 class TrailJournal{
   final int? id;
@@ -61,38 +62,5 @@ class TrailJournal{
       'alternates': alternates?.map((alt) => alt.toJson()).toList(),
       'neroThreshold': neroThreshold,
     };
-  }
-}
-
-enum TrailDirection { // referring to where they want mile 0 to start and what direction the miles increase in
-  noBo, // Northbound
-  soBo, // Southbound
-  eaBo, // Eastbound
-  weBo, // Westbound
-  clockWise, // Clockwise
-  counterClockWise, // Counter-clockwise
-  forward, // Forward
-  backward,; // Backward
-
-// Method to get the opposite direction
-  TrailDirection get opposite {
-    switch (this) {
-      case TrailDirection.noBo:
-        return TrailDirection.soBo;
-      case TrailDirection.soBo:
-        return TrailDirection.noBo;
-      case TrailDirection.eaBo:
-        return TrailDirection.weBo;
-      case TrailDirection.weBo:
-        return TrailDirection.eaBo;
-      case TrailDirection.clockWise:
-        return TrailDirection.counterClockWise;
-      case TrailDirection.counterClockWise:
-        return TrailDirection.clockWise;
-      case TrailDirection.forward:
-        return TrailDirection.backward;
-      case TrailDirection.backward:
-        return TrailDirection.forward;
-    }
   }
 }

@@ -2,39 +2,7 @@ import 'trail_journal.dart';
 import 'alternate_route.dart';
 import 'gear.dart';
 
-/*
-Still TBD if I want to include trail section right now
-class TrailSection { // get trail sections from database
-  final String sectionName;
-  final double startMarker;
-  final double endMarker;
-
-  TrailSection({
-    required this.sectionName,
-    required this.startMarker,
-    required this.endMarker,
-  });
-
-  factory TrailSection.fromJson(Map<String, dynamic> json) {
-    return TrailSection(
-      sectionName: json['sectionName'],
-      startMarker: json['startMarker'],
-      endMarker: json['endMarker'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'sectionName': sectionName,
-      'startMarker': startMarker,
-      'endMarker': endMarker,
-    };
-  }
-}
-*/
-
 // FullDataEntry class to represent a single row in the dataset corresponding to a single day on the trail
-// Consider adding ID number for each entry
 class FullDataEntry {
   final int? id;
   final CoreDataEntry coreDataEntry;
@@ -163,27 +131,3 @@ class OptionalFields{
     );
   }
 }
-
-
-
-/* calculated for each day
-* section of trail - add this later
-* direction - DONE
-* day # - DONE
-*distance - DONE
-*zero/nero - add this later
-*/
-
-/* Calculated for whole trail
-* total trail mileage
-* total mileage including alternates and side quests
-* percent of trail completed
-* percent of each section completed
-* total days on trail
-* total miles on current pair of shoes
-* number of resupplies
-* number of town days
-* number of trail magics
-* number of wildlife sightings
-* number of zeros/neros
-*/

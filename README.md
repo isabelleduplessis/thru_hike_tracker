@@ -5,6 +5,18 @@ Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, 
 ## Progress Log
 
 ### Day To Day Progress and Goals
+
+
+**Feb 5, 2025**
+* Created sections model and linked to trail metadata
+* Added sections and default direction to trail metadata
+* Created new file to store trail properties (direction and structure) in
+
+TODO:
+* Section database service
+* Ensure no ID conflicts between custom trails and defined trails
+
+
 **Feb 4, 2025**
 
 
@@ -36,8 +48,6 @@ TODO:
 * ~~Define gear/shoe model~~
 * ~~Add option in alternate route data model for start/end location on this alternate (yes or no)~~
 
-
-*Began documenting February 2nd, 2025*
 
 ### Setting Up App
 
