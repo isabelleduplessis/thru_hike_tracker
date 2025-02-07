@@ -1,9 +1,6 @@
-// Work on database schema!!! how is everything related??
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:thru_hike_tracker/models/data_entry.dart';
-//import 'package:thru_hike_tracker/models/trail_journal.dart';
-//import 'package:thru_hike_tracker/models/trail_metadata.dart';
 
 class DatabaseHelper {
   // Singleton instance
@@ -28,10 +25,10 @@ class DatabaseHelper {
       join(await getDatabasesPath(), _dbName),
       onCreate: (db, version) async {
 
-        // Full data entry table
+        // Full data entry table - CRUD operations in data_entry_service.dart
         await db.execute('''
           CREATE TABLE FullDataEntry(
-            id INTEGER PRIMARY KEY, 
+            id INTEGER PRIMARY KEY AUTOINCREMENT, 
             trail_journal_id INTEGER,  -- Foreign key linking to TrailJournal
             current_date TEXT, 
             start REAL, 
@@ -52,10 +49,19 @@ class DatabaseHelper {
             FOREIGN KEY (trail_journal_id) REFERENCES TrailJournal(id) ON DELETE CASCADE
           )
         ''');
-
+        // Alternate route table - CRUD operations in alternate_route_service.dart
+        await db.execute('''
+          CREATE TABLE AlternateRoute (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            distance_added REAL NOT NULL,
+            distance_skipped REAL NOT NULL
+          )
+        ''');
+        // // Alternate route table connected to data entries - CRUD operations in data_entry_service.dart
         await db.execute('''
           CREATE TABLE FullDataEntry_AlternateRoutes (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             full_data_entry_id INTEGER,  -- Foreign key linking to FullDataEntry (one per day)
             alternate_route_id INTEGER,  -- Foreign key linking to AlternateRoutes
             start_on_alternate INTEGER NOT NULL DEFAULT 0,  -- Whether this day started on the alternate
@@ -65,18 +71,7 @@ class DatabaseHelper {
           )
         ''');
 
-        await db.execute('''
-          CREATE TABLE FullDataEntry_AlternateRoutes (
-            id INTEGER PRIMARY KEY,
-            full_data_entry_id INTEGER,  -- Foreign key linking to FullDataEntry (one per day)
-            alternate_route_id INTEGER,  -- Foreign key linking to AlternateRoutes
-            start_on_alternate INTEGER NOT NULL DEFAULT 0,  -- Whether this day started on the alternate
-            end_on_alternate INTEGER NOT NULL DEFAULT 0,  -- Whether this day ended on the alternate
-            FOREIGN KEY (full_data_entry_id) REFERENCES FullDataEntry(id) ON DELETE CASCADE,
-            FOREIGN KEY (alternate_route_id) REFERENCES AlternateRoutes(id) ON DELETE CASCADE
-          )
-        ''');
-        // Create TrailJournal table
+        // Trail journal table - CRUD operations in trail_journal_service.dart
         await db.execute('''
           CREATE TABLE TrailJournal(
             id INTEGER PRIMARY KEY, 
@@ -88,6 +83,8 @@ class DatabaseHelper {
             totalLength REAL,   -- Total length of the trail including alternate routes
             totalMilesHiked REAL,   -- Total miles hiked (calculated from FullDataEntry sum)
             trailMilesHiked REAL,   -- Total miles hiked on the trail excluding alternates, based on last recorded trail mile marker
+            totalMilesAdded REAL,   -- Total miles added from alternate routes
+            totalMilesSkipped REAL,   -- Total miles skipped from alternate routes
             percentTrailComplete REAL,   -- Percentage of the trail completed (calculated from trailMilesHiked / initialLength)
             percentTotalComplete REAL,   -- Percentage of the total trail completed (calculated from totalMilesHiked / totalLength)
             neroThreshold REAL DEFAULT 10.0,   -- Threshold for a Near-Zero day (in miles)
@@ -98,19 +95,51 @@ class DatabaseHelper {
             FOREIGN KEY (trailId) REFERENCES TrailMetadata(trailId) ON DELETE SET NULL
           )
         ''');
-
+        // Gear item table - CRUD operations in gear_service.dart
         await db.execute('''
-          CREATE TABLE TrailJournalShoes (
-            id INTEGER PRIMARY KEY,
-            trail_journal_id INTEGER,  -- Foreign key to TrailJournal
-            shoe_id INTEGER,           -- Foreign key to Shoes
-            milesOnShoes REAL,         -- Miles hiked with this pair of shoes on this trail journal
-            FOREIGN KEY (trail_journal_id) REFERENCES TrailJournal(id) ON DELETE CASCADE,
-            FOREIGN KEY (shoe_id) REFERENCES Shoes(id) ON DELETE CASCADE
+          CREATE TABLE GearItem (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL
           )
         ''');
-
-        // TrailMetadata table
+        // Gear item table for each user - CRUD operations in user_service.dart
+        await db.execute('''
+          CREATE TABLE UserGear (
+            id INTEGER PRIMARY KEY,
+            trail_journal_id INTEGER NOT NULL,
+            gear_item_id INTEGER NOT NULL,
+            start_date TEXT NOT NULL, -- Tracks when the gear was used
+            end_date TEXT DEFAULT NULL, -- NULL if still in use
+            total_miles_used REAL DEFAULT 0,
+            FOREIGN KEY (trail_journal_id) REFERENCES TrailJournal(id),
+            FOREIGN KEY (gear_item_id) REFERENCES GearItem(id)
+          )
+        ''');
+        // Progress for each trail journal - CRUD operations in user_service.dart
+        await db.execute('''
+          CREATE TABLE UserTrailProgress ( -- will basically keep track of which trails a user is doing
+            id INTEGER PRIMARY KEY,
+            trail_journal_id INTEGER NOT NULL,
+            section_id INTEGER NOT NULL,
+            completed INTEGER DEFAULT 0,
+            last_mile_marker REAL DEFAULT 0,
+            FOREIGN KEY (trail_journal_id) REFERENCES TrailJournal(id),
+            FOREIGN KEY (section_id) REFERENCES Section(id),
+            UNIQUE (trail_journal_id, section_id)
+          )
+        ''');
+        // Gear item table - CRUD operations in data_entry_service.dart
+        await db.execute('''
+          CREATE TABLE FullDataEntryGear (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_data_entry_id INTEGER,
+            gear_item_id INTEGER,
+            miles_used REAL,
+            FOREIGN KEY (gear_item_id) REFERENCES GearItem(id)
+          )
+        ''');
+        // Trail metadata table - CRUD operations in trail_metadata_service.dart
         await db.execute('''
           CREATE TABLE TrailMetadata(
             trailId TEXT PRIMARY KEY, 
@@ -124,6 +153,16 @@ class DatabaseHelper {
             trailDescription TEXT, 
             trailUrl TEXT
           )
+        ''');
+        // Section table - CRUD operations in trail_metadata_service.dart
+        await db.execute('''
+          CREATE TABLE Section (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            section_name TEXT NOT NULL,
+            trail_id TEXT NOT NULL, -- Links to TrailMetadata
+            end_mile REAL NOT NULL, -- The mile marker where this section ends
+            FOREIGN KEY (trail_id) REFERENCES TrailMetadata(trailId) ON DELETE CASCADE
+        )
         ''');
 
       },
