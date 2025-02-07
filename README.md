@@ -7,13 +7,22 @@ Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, 
 ### Day To Day Progress and Goals
 
 
+**Feb 6, 2025**
+* Put all create table statements for every data model in database_helper.dart and noted which service file each table's CRUD operations will go in
+* Removed formula model and service - will just stick to predefined calculations for now
+
+TODO:
+* Confirm columns in each table
+* Create CRUD operations for each table
+* Decide if I should autoincrement table ids
+
 **Feb 5, 2025**
 * Created sections model and linked to trail metadata
 * Added sections and default direction to trail metadata
 * Created new file to store trail properties (direction and structure) in
 
 TODO:
-* Section database service
+* ~~Section database service~~
 * Ensure no ID conflicts between custom trails and defined trails
 
 
@@ -30,8 +39,6 @@ Completed:
     * Created distinct gear_service.dart file and created all CRUD operations for gear
 
 TODO:
-* Delegate the rest of database_helper.dart tables into separate files with CRUD operations (make alternate service, metadata service)
-    * Think about what would go in user_service.dart. I think it would be used for calculating lifetime stats. Get data from all trail journals
 * Try to test some of the code? VScode says no syntax errors so far
 
 
