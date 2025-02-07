@@ -1,6 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:thru_hike_tracker/models/gear.dart';
 
+//add trail journal gear
+
+
 class GearService {
   final Database db;
 
@@ -9,22 +12,8 @@ class GearService {
 
   // 1. Create tables if they don't exist (called once on database creation)
   static Future<void> onCreate(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE GearItem (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL
-      )
-    ''');
-    await db.execute('''
-      CREATE TABLE FullDataEntryGear (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_data_entry_id INTEGER,
-        gear_item_id INTEGER,
-        miles_used REAL,
-        FOREIGN KEY (gear_item_id) REFERENCES GearItem(id)
-      )
-    ''');
+    
+    
     // Add any other tables you need (e.g., FullDataEntry, CoreDataEntry, etc.)
   }
 
