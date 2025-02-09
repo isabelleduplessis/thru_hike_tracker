@@ -1,44 +1,48 @@
-import 'package:sqflite/sqflite.dart';
-//import 'database_helper.dart'; // Import DatabaseHelper
+import 'database_helper.dart'; // Import the database helper
 import 'package:thru_hike_tracker/models/data_entry.dart';
 
-class FullDataEntryService {
-  final Database db;
 
-  FullDataEntryService(this.db);
+class DataEntryService {
 
-  // Table creation for FullDataEntry
-  Future<void> createFullDataEntryTable() async {
-    
+ Future<void> insertFullDataEntry(FullDataEntry entry) async {
+  final db = await DatabaseHelper.getDatabase();
 
-  // Add a new data entry
-  Future<int> addDataEntry(FullDataEntry entry) async {
-    return await db.insert("FullDataEntry", entry.toJson(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+  // 1. Insert FullDataEntry
+  int entryId = await db.insert('FullDataEntry', entry.toJson());
 
-  // Update an existing data entry
-  Future<int> updateDataEntry(FullDataEntry entry) async {
-    return await db.update("FullDataEntry", entry.toJson(),
-        where: "id = ?",
-        whereArgs: [entry.id],
-        conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  // Delete a data entry
-  Future<int> deleteDataEntry(FullDataEntry entry) async {
-    return await db.delete("FullDataEntry",
-        where: "id = ?",
-        whereArgs: [entry.id]);
-  }
-
-  // Get all data entries
-  Future<List<FullDataEntry>?> getAllDataEntries() async {
-    final List<Map<String, dynamic>> maps = await db.query("FullDataEntry");
-    if (maps.isEmpty) {
-      return null;
+  // 2. Insert related data (OptionalFields)
+  if (entry.optionalFields != null) {
+    if (entry.optionalFields!.town != null) {
+      for (var town in entry.optionalFields!.town!) {
+        await db.insert('fullDataEntry_town', {
+          'data_entry_id': entryId,
+          'town_id': town,
+        });
+      }
     }
-    return List.generate(maps.length, (index) => FullDataEntry.fromJson(maps[index]));
+
+    // Insert wildlife sightings
+    if (entry.optionalFields!.wildlife != null) {
+      for (var animal in entry.optionalFields!.wildlife!.entries) {
+        await db.insert('Wildlife', {
+          'data_entry_id': entryId,
+          'animal': animal.key,
+          'count': animal.value,
+        });
+      }
+    }
+
+    // Insert custom fields
+    if (entry.optionalFields!.customFields.isNotEmpty) {
+      for (var field in entry.optionalFields!.customFields.entries) {
+        await db.insert('custom_fields', {
+          'data_entry_id': entryId,
+          'field_name': field.key,
+          'field_value': field.value,
+        });
+      }
+    }
   }
 }
+
 }

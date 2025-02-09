@@ -6,13 +6,27 @@ Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, 
 
 ### Day To Day Progress and Goals
 
+**Feb 8, 2025**
+
+Completed:
+* Added towns to data model
+* Made all tables part of data_entry_service good and complete
+    * Started working on insert statements for these tables
+
+TODO:
+* Make sure foreign keys are right
+* Finish insert statements for these tables and others
+* Work on update and delete statements
 
 **Feb 6, 2025**
+
+Completed:
 * Put all create table statements for every data model in database_helper.dart and noted which service file each table's CRUD operations will go in
 * Removed formula model and service - will just stick to predefined calculations for now
 
 TODO:
 * Confirm columns in each table
+    * ~~confirmed for data entry related tables~~
 * Create CRUD operations for each table
 * Decide if I should autoincrement table ids
 

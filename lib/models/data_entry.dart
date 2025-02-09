@@ -42,22 +42,22 @@ class FullDataEntry {
 // Minimum required fields for an entry
 class CoreDataEntry{
   final DateTime currentDate;     // Corresponds to the 'Current Date' column
-  final double start;      // Corresponds to the 'Start' column where value is a measure of distance
-  final double end;        // Corresponds to the 'End' column where value is a measure of distance
+  final double startMile;      // Corresponds to the 'Start' column where value is a measure of distance
+  final double endMile;        // Corresponds to the 'End' column where value is a measure of distance
   final TrailJournal trailJournal;    // Reference to the TrailJournal object
 
   CoreDataEntry({
     required this.currentDate,
-    required this.start,
-    required this.end,
+    required this.startMile,
+    required this.endMile, 
     required this.trailJournal,
   });
 
   factory CoreDataEntry.fromJson(Map<String, dynamic> json) {
     return CoreDataEntry(
       currentDate: DateTime.parse(json['currentDate']),
-      start: json['start'],
-      end: json['end'],
+      startMile: json['start'],
+      endMile: json['end'],
       trailJournal: TrailJournal.fromJson(json['trailJournal']),
     );
   }
@@ -65,8 +65,8 @@ class CoreDataEntry{
   Map<String, dynamic> toJson() {
     return {
       'currentDate': currentDate.toIso8601String(),
-      'start': start,
-      'end': end,
+      'startMile': startMile,
+      'endMile': endMile,
       'trailJournal': trailJournal.toJson(),
     };
   }
@@ -79,6 +79,7 @@ class OptionalFields{
   final double? elevationGain; // Corresponds to the 'Elevation Gain' column where value is a measure of distance
   final double? elevationLoss; // Corresponds to the 'Elevation Loss' column where value is a measure of distance
   final String? notes; // Corresponds to the 'Notes' column
+  final List<String>? town; // Corresponds to the 'Town' column
   final Map<String, int>? wildlife; // Corresponds to the 'Wildlife' column
   final List<FullDataEntryGear>? gearUsed;  // List of all gear used (shoes + custom gear)
   final Map<String, dynamic> customFields; // Custom fields
@@ -90,6 +91,7 @@ class OptionalFields{
     this.elevationGain,
     this.elevationLoss,
     this.notes,
+    this.town,
     this.wildlife,
     this.gearUsed,
     Map<String, dynamic>? customFields,
@@ -104,6 +106,7 @@ class OptionalFields{
       'elevationGain': elevationGain,
       'elevationLoss': elevationLoss,
       'notes': notes,
+      'town': town,
       'wildlife': wildlife,
       'gearUsed': gearUsed?.map((g) => g.toJson()).toList(),
       'customFields': customFields,
@@ -119,6 +122,7 @@ class OptionalFields{
       elevationGain: json['elevationGain'],
       elevationLoss: json['elevationLoss'],
       notes: json['notes'],
+      town: json['town'] != null ? List<String>.from(json['town']) : null,
       wildlife: json['wildlife'] != null
           ? Map<String, int>.from(json['wildlife'])
           : null,
