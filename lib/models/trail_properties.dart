@@ -14,9 +14,10 @@ enum TrailDirection { // referring to where they want mile 0 to start and what d
   clockWise, // Clockwise
   counterClockWise, // Counter-clockwise
   forward, // Forward
-  backward,; // Backward
+  backward, // Backward
+  noDirection,; // No direction specified
 
-// Method to get the opposite direction
+// Method to get the opposite direction - automatically do, but still allow user to change
   TrailDirection get opposite {
     switch (this) {
       case TrailDirection.noBo:
@@ -35,6 +36,8 @@ enum TrailDirection { // referring to where they want mile 0 to start and what d
         return TrailDirection.backward;
       case TrailDirection.backward:
         return TrailDirection.forward;
+      case TrailDirection.noDirection:
+        return TrailDirection.noDirection;
     }
   }
 }
