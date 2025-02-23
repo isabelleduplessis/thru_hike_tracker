@@ -1,48 +1,51 @@
 import 'database_helper.dart'; // Import the database helper
 import 'package:thru_hike_tracker/models/data_entry.dart';
 
-
 class DataEntryService {
 
- Future<void> insertFullDataEntry(FullDataEntry entry) async {
-  final db = await DatabaseHelper.getDatabase();
+  Future<void> insertFullDataEntry(FullDataEntry entry) async {
+    final db = await DatabaseHelper.getDatabase();
+    final batch = db.batch();
 
-  // 1. Insert FullDataEntry
-  int entryId = await db.insert('FullDataEntry', entry.toJson());
+    try {
+      // Insert FullDataEntry and get its ID
+      int entryId = await db.insert('FullDataEntry', entry.toJson());
 
-  // 2. Insert related data (OptionalFields)
-  if (entry.optionalFields != null) {
-    if (entry.optionalFields!.town != null) {
-      for (var town in entry.optionalFields!.town!) {
-        await db.insert('fullDataEntry_town', {
-          'data_entry_id': entryId,
-          'town_id': town,
+      // Insert related data using batch operations
+      final optionalFields = entry.optionalFields;
+
+      if (optionalFields != null) {
+        // Insert towns
+        optionalFields.town?.forEach((townId) {
+          batch.insert('fullDataEntry_town', {
+            'data_entry_id': entryId,
+            'town_id': townId,
+          });
         });
-      }
-    }
 
-    // Insert wildlife sightings
-    if (entry.optionalFields!.wildlife != null) {
-      for (var animal in entry.optionalFields!.wildlife!.entries) {
-        await db.insert('Wildlife', {
-          'data_entry_id': entryId,
-          'animal': animal.key,
-          'count': animal.value,
+        // Insert wildlife sightings
+        optionalFields.wildlife?.entries.forEach((animal) {
+          batch.insert('Wildlife', {
+            'data_entry_id': entryId,
+            'animal': animal.key,
+            'count': animal.value,
+          });
         });
-      }
-    }
 
-    // Insert custom fields
-    if (entry.optionalFields!.customFields.isNotEmpty) {
-      for (var field in entry.optionalFields!.customFields.entries) {
-        await db.insert('custom_fields', {
-          'data_entry_id': entryId,
-          'field_name': field.key,
-          'field_value': field.value,
-        });
+        // Insert custom fields (handling key-value pairs)
+        for (var field in optionalFields.customFields.entries) {
+          batch.insert('custom_fields', {
+            'data_entry_id': entryId,
+            'field_name': field.key,
+            'field_value': field.value,
+          });
+        }
       }
+
+      // Commit batch inserts
+      await batch.commit();
+    } catch (e) {
+      print('Error inserting full data entry: $e');
     }
   }
-}
-
 }

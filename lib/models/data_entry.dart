@@ -1,6 +1,8 @@
 import 'trail_journal.dart';
 import 'alternate_route.dart';
 import 'gear.dart';
+import 'dart:convert';
+
 
 // FullDataEntry class to represent a single row in the dataset corresponding to a single day on the trail
 class FullDataEntry {
@@ -19,32 +21,75 @@ class FullDataEntry {
   factory FullDataEntry.fromJson(Map<String, dynamic> json) {
     return FullDataEntry(
       id: json['id'],
-      coreDataEntry: CoreDataEntry.fromJson(json['coreDataEntry']),
-      alternateRoutes: (json['alternate_routes'] as List?)
-          ?.map((a) => FullDataEntryAlternateRoute.fromJson(a))
-          .toList(),
-      optionalFields: json['optionalFields'] != null
-          ? OptionalFields.fromJson(json['optionalFields'])
-          : null,
+      coreDataEntry: CoreDataEntry.fromJson(json),
+      alternateRoutes: json['alternate_route_ids'] != null
+          ? (json['alternate_route_ids'] as String)
+              .split(', ')
+              .map((id) => FullDataEntryAlternateRoute(
+                    fullDataEntryId: json['id'],
+                    alternateRouteId: int.parse(id)))
+              .toList()
+          : [],
+      optionalFields: OptionalFields(
+        startLocation: json['start_location'],
+        endLocation: json['end_location'],
+        campType: json['camp_type'],
+        elevationGain: json['elevation_gain'],
+        elevationLoss: json['elevation_loss'],
+        notes: json['notes'],
+        town: json['town'] != null ? (json['town'] as String).split(', ') : null,
+        wildlife: json['wildlife'] != null ? Map<String, int>.from(jsonDecode(json['wildlife'])) : null,
+        gearUsed: json['gear_used'] != null
+            ? (jsonDecode(json['gear_used']) as List)
+                .map((g) => FullDataEntryGear.fromJson(g))
+                .toList()
+            : null,
+        customFields: json['custom_fields'] != null
+            ? Map<String, dynamic>.from(jsonDecode(json['custom_fields']))
+            : {},
+      ),
     );
   }
+
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'coreDataEntry': coreDataEntry.toJson(),
-      'alternate_routes': alternateRoutes?.map((a) => a.toJson()).toList(),
-      'optionalFields': optionalFields?.toJson(),
+      'current_date': coreDataEntry.currentDate.toIso8601String(),
+      'start_mile': coreDataEntry.startMile,
+      'end_mile': coreDataEntry.endMile,
+      'trail_journal_id': coreDataEntry.trailJournal.id,
+
+      // Optional fields
+      'start_location': optionalFields?.startLocation,
+      'end_location': optionalFields?.endLocation,
+      'camp_type': optionalFields?.campType,
+      'elevation_gain': optionalFields?.elevationGain,
+      'elevation_loss': optionalFields?.elevationLoss,
+      'notes': optionalFields?.notes,
+
+      // CSV for towns
+      'town': optionalFields?.town?.join(', '),
+
+      // JSON strings for wildlife and custom fields
+      'wildlife': optionalFields?.wildlife != null ? jsonEncode(optionalFields!.wildlife) : null,
+      'custom_fields': optionalFields?.customFields.isNotEmpty == true ? jsonEncode(optionalFields!.customFields) : null,
+
+      // CSV for alternate routes and gear used
+      'alternate_route_ids': alternateRoutes?.map((a) => a.id).join(', '),
+      'gear_used': optionalFields?.gearUsed != null
+          ? jsonEncode(optionalFields!.gearUsed!.map((g) => g.toJson()).toList())
+          : null,
     };
-  }
 }
 
-// Minimum required fields for an entry
+
+}
 class CoreDataEntry{
-  final DateTime currentDate;     // Corresponds to the 'Current Date' column
-  final double startMile;      // Corresponds to the 'Start' column where value is a measure of distance
-  final double endMile;        // Corresponds to the 'End' column where value is a measure of distance
-  final TrailJournal trailJournal;    // Reference to the TrailJournal object
+  final DateTime currentDate;     
+  final double startMile;      
+  final double endMile;        
+  final TrailJournal trailJournal;    
 
   CoreDataEntry({
     required this.currentDate,
@@ -56,8 +101,8 @@ class CoreDataEntry{
   factory CoreDataEntry.fromJson(Map<String, dynamic> json) {
     return CoreDataEntry(
       currentDate: DateTime.parse(json['currentDate']),
-      startMile: json['start'],
-      endMile: json['end'],
+      startMile: json['startMile'],
+      endMile: json['endMile'],
       trailJournal: TrailJournal.fromJson(json['trailJournal']),
     );
   }
@@ -73,16 +118,16 @@ class CoreDataEntry{
 }
 
 class OptionalFields{
-  final String? startLocation; // Corresponds to the 'Start Location' column
-  final String? endLocation; // Corresponds to the 'End Location' column
-  final String? campType; // Corresponds to the 'Sleep Type' column, options being Tent, Cowboy, Shelter, Bed, or Other
-  final double? elevationGain; // Corresponds to the 'Elevation Gain' column where value is a measure of distance
-  final double? elevationLoss; // Corresponds to the 'Elevation Loss' column where value is a measure of distance
-  final String? notes; // Corresponds to the 'Notes' column
-  final List<String>? town; // Corresponds to the 'Town' column
-  final Map<String, int>? wildlife; // Corresponds to the 'Wildlife' column
-  final List<FullDataEntryGear>? gearUsed;  // List of all gear used (shoes + custom gear)
-  final Map<String, dynamic> customFields; // Custom fields
+  final String? startLocation; 
+  final String? endLocation; 
+  final String? campType; 
+  final double? elevationGain; 
+  final double? elevationLoss; 
+  final String? notes; 
+  final List<String>? town; 
+  final Map<String, int>? wildlife; 
+  final List<FullDataEntryGear>? gearUsed;  
+  final Map<String, dynamic> customFields; 
 
   OptionalFields({
     this.startLocation,
@@ -95,9 +140,8 @@ class OptionalFields{
     this.wildlife,
     this.gearUsed,
     Map<String, dynamic>? customFields,
-  }) : customFields = customFields ?? {}; // Ensure it's initialized
+  }) : customFields = customFields ?? {}; 
 
-  // Method to convert an OptionalFields instance to a JSON object
   Map<String, dynamic> toJson() {
     return {
       'startLocation': startLocation,
@@ -113,22 +157,21 @@ class OptionalFields{
     };
   }
 
-  // Method to create an instance of OptionalFields from a JSON object
   factory OptionalFields.fromJson(Map<String, dynamic> json) {
     return OptionalFields(
       startLocation: json['startLocation'],
       endLocation: json['endLocation'],
       campType: json['campType'],
-      elevationGain: json['elevationGain'],
-      elevationLoss: json['elevationLoss'],
+      elevationGain: (json['elevationGain'] as num?)?.toDouble(),
+      elevationLoss: (json['elevationLoss'] as num?)?.toDouble(),
       notes: json['notes'],
       town: json['town'] != null ? List<String>.from(json['town']) : null,
       wildlife: json['wildlife'] != null
           ? Map<String, int>.from(json['wildlife'])
           : null,
-      gearUsed: (json['gear_used'] as List?)
-          ?.map((gear) => FullDataEntryGear.fromJson(gear))
-          .toList(),
+      gearUsed: json['gearUsed'] != null
+          ? (json['gearUsed'] as List).map((gear) => FullDataEntryGear.fromJson(gear)).toList()
+          : null,
       customFields: json['customFields'] != null
           ? Map<String, dynamic>.from(json['customFields'])
           : {},

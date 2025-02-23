@@ -31,28 +31,33 @@ class GearItem {
 
 class FullDataEntryGear {
   final int id;
-  final int fullDataEntryId; // Links to FullDataEntry (one per day)
-  final int gearItemId; // Links to GearItem
+  final int gearItemId; // Reference to UserGear table
+  final String name;
+  final String type;
 
   FullDataEntryGear({
     required this.id,
-    required this.fullDataEntryId,
     required this.gearItemId,
+    required this.name,
+    required this.type,
   });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'full_data_entry_id': fullDataEntryId,
-      'gear_item_id': gearItemId,
-    };
-  }
 
   factory FullDataEntryGear.fromJson(Map<String, dynamic> json) {
     return FullDataEntryGear(
       id: json['id'],
-      fullDataEntryId: json['full_data_entry_id'],
       gearItemId: json['gear_item_id'],
+      name: json['name'],
+      type: json['type'],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'gear_item_id': gearItemId,
+      'name': name,
+      'type': type,
+    };
+  }
 }
+

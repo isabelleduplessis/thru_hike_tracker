@@ -6,6 +6,12 @@ Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, 
 
 ### Day To Day Progress and Goals
 
+**Feb 22, 2025**
+
+Completed:
+* Fix JSON methods for full data entries
+* Updated database_helper and data_entry_service
+
 **Feb 8, 2025**
 
 Completed:
@@ -28,7 +34,6 @@ TODO:
 * Confirm columns in each table
     * ~~confirmed for data entry related tables~~
 * Create CRUD operations for each table
-* Decide if I should autoincrement table ids
 
 **Feb 5, 2025**
 * Created sections model and linked to trail metadata

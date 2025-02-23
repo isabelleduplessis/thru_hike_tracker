@@ -49,27 +49,28 @@ class FullDataEntryAlternateRoute {
     this.id,
     required this.fullDataEntryId,
     required this.alternateRouteId,
-    required this.startOnAlternate,
-    required this.endOnAlternate,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'full_data_entry_id': fullDataEntryId,
-      'alternate_route_id': alternateRouteId,
-      'start_on_alternate': startOnAlternate ? 1 : 0,
-      'end_on_alternate': endOnAlternate ? 1 : 0,
-    };
-  }
+    bool? startOnAlternate,
+    bool? endOnAlternate,
+  })  : startOnAlternate = startOnAlternate ?? false,
+        endOnAlternate = endOnAlternate ?? false;
 
   factory FullDataEntryAlternateRoute.fromJson(Map<String, dynamic> json) {
     return FullDataEntryAlternateRoute(
       id: json['id'],
-      fullDataEntryId: json['full_data_entry_id'],
-      alternateRouteId: json['alternate_route_id'],
-      startOnAlternate: (json['start_on_alternate'] as int) == 1,
-      endOnAlternate: (json['end_on_alternate'] as int) == 1,
+      fullDataEntryId: json['fullDataEntryId'],
+      alternateRouteId: json['alternateRouteId'],
+      startOnAlternate: json['startOnAlternate'] ?? false,
+      endOnAlternate: json['endOnAlternate'] ?? false,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'fullDataEntryId': fullDataEntryId,
+      'alternateRouteId': alternateRouteId,
+      'startOnAlternate': startOnAlternate,
+      'endOnAlternate': endOnAlternate,
+    };
   }
 }

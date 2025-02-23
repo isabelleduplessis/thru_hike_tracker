@@ -23,14 +23,16 @@ class DatabaseHelper {
     if (_database != null) return _database!;
     _database = await openDatabase(
       join(await getDatabasesPath(), _dbName),
+      onOpen: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON;');
+      },
       onCreate: (db, version) async {
 
         // Full data entry table - CRUD operations in data_entry_service.dart
         await db.execute('''
-          CREATE TABLE FullDataEntry(
+          CREATE TABLE full_data_entry(
             id INTEGER PRIMARY KEY AUTOINCREMENT, 
             -- CoreDataEntry fields
-            trail_journal_id INTEGER,  -- Foreign key linking to TrailJournal
             current_date TEXT, -- Date of entry
             start_mile REAL, -- Start mile marker
             end_mile REAL, -- End mile marker
@@ -49,6 +51,7 @@ class DatabaseHelper {
             net_elevation REAL, -- Optional, can be null
             directon TEXT, -- Reverse initial direction if trail distance is negative
             -- Foreign keys
+            trail_journal_id INTEGER,  -- Foreign key linking to TrailJournal
             section_id INTEGER,  -- Foreign key linking to Section
             alternate_route_id INTEGER, -- Link to alternate route
             FOREIGN KEY (section_id) REFERENCES sections(id),
@@ -66,7 +69,7 @@ class DatabaseHelper {
           )
         ''');
         await db.execute('''
-          CREATE TABLE fullDataEntry_town (
+          CREATE TABLE full_data_entry_town (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             data_entry_id INTEGER,
             town_id INTEGER,
@@ -79,7 +82,7 @@ class DatabaseHelper {
         // Wildlife table - CRUD operations in data_entry_service.dart
         // ONE TO MANY ENTRIES
         await db.execute('''
-          CREATE TABLE Wildlife (
+          CREATE TABLE wildlife (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             data_entry_id INTEGER,  -- Foreign key linking to FullDataEntry
             animal TEXT NOT NULL,
@@ -101,7 +104,7 @@ class DatabaseHelper {
         ''');
         // Gear item table - CRUD operations in data_entry_service.dart
         await db.execute('''
-          CREATE TABLE FullDataEntryGear (
+          CREATE TABLE full_data_entry_gear (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             full_data_entry_id INTEGER,
             gear_item_id INTEGER,
@@ -111,7 +114,7 @@ class DatabaseHelper {
         ''');
         // Alternate route table connected to data entries - CRUD operations in data_entry_service.dart
         await db.execute('''
-          CREATE TABLE FullDataEntry_AlternateRoutes (
+          CREATE TABLE full_data_entry_alternate_routes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             full_data_entry_id INTEGER,  -- Foreign key linking to FullDataEntry (one per day)
             alternate_route_id INTEGER,  -- Foreign key linking to AlternateRoutes
@@ -123,7 +126,7 @@ class DatabaseHelper {
         ''');
         // Alternate route table - CRUD operations in alternate_route_service.dart
         await db.execute('''
-          CREATE TABLE AlternateRoute (
+          CREATE TABLE alternate_route (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             distance_added REAL NOT NULL,
@@ -133,7 +136,7 @@ class DatabaseHelper {
 
         // Trail journal table - CRUD operations in trail_journal_service.dart
         await db.execute('''
-          CREATE TABLE TrailJournal(
+          CREATE TABLE trail_journal(
             id INTEGER PRIMARY KEY, 
             trailName TEXT, 
             startDate TEXT, 
@@ -157,7 +160,7 @@ class DatabaseHelper {
         ''');
         // Gear item table - CRUD operations in gear_service.dart
         await db.execute('''
-          CREATE TABLE GearItem (
+          CREATE TABLE gear_item (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             type TEXT NOT NULL
@@ -165,7 +168,7 @@ class DatabaseHelper {
         ''');
         // Gear item table for each user - CRUD operations in user_service.dart
         await db.execute('''
-          CREATE TABLE UserGear (
+          CREATE TABLE user_gear (
             id INTEGER PRIMARY KEY,
             trail_journal_id INTEGER NOT NULL,
             gear_item_id INTEGER NOT NULL,
@@ -178,7 +181,7 @@ class DatabaseHelper {
         ''');
         // Progress for each trail journal - CRUD operations in user_service.dart
         await db.execute('''
-          CREATE TABLE UserTrailProgress ( -- will basically keep track of which trails a user is doing
+          CREATE TABLE user_trail_progress ( -- will basically keep track of which trails a user is doing
             id INTEGER PRIMARY KEY,
             trail_journal_id INTEGER NOT NULL,
             section_id INTEGER NOT NULL,
@@ -192,22 +195,18 @@ class DatabaseHelper {
         
         // Trail metadata table - CRUD operations in trail_metadata_service.dart
         await db.execute('''
-          CREATE TABLE TrailMetadata(
-            trailId TEXT PRIMARY KEY, 
-            trailName TEXT, 
-            trailType TEXT, 
-            trailLength REAL, 
-            trailStructure TEXT, 
-            trailDirection TEXT, 
-            trailStart TEXT, 
-            trailEnd TEXT, 
-            trailDescription TEXT, 
-            trailUrl TEXT
+          CREATE TABLE trail_metadata(
+            trail_id TEXT PRIMARY KEY, 
+            trail_name TEXT, 
+            trail_type TEXT, 
+            trail_length REAL, 
+            trail_structure TEXT, 
+            trail_direction TEXT
           )
         ''');
         // Section table - CRUD operations in trail_metadata_service.dart
         await db.execute('''
-          CREATE TABLE Section (
+          CREATE TABLE section (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             section_name TEXT NOT NULL,
             trail_id TEXT NOT NULL, -- Links to TrailMetadata
@@ -224,9 +223,18 @@ class DatabaseHelper {
 
   static Future<int> addDataEntry(FullDataEntry entry) async {
     final db = await _getDB();
-    return await db.insert("FullDataEntry", entry.toJson(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    try {
+      return await db.insert(
+        "FullDataEntry",
+        entry.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print("Error adding data entry: $e");
+      return -1; // Indicate failure
+    }
   }
+
 
   static Future<int> updateDataEntry(FullDataEntry entry) async {
     final db = await _getDB();
@@ -244,14 +252,17 @@ class DatabaseHelper {
     );
   }
   
-  static Future<List<FullDataEntry>?> getAllDataEntries() async {
+  static Future<List<FullDataEntry>> getAllDataEntries({int? limit}) async {
     final db = await _getDB();
-    final List<Map<String, dynamic>> maps = await db.query("FullDataEntry");
-    if(maps.isEmpty) { // ChatGPT says I can return an empty list instead of null
-      return null;
-    }
-    return List.generate(maps.length, (index) => FullDataEntry.fromJson(maps[index]));
+    final maps = await db.query(
+      "FullDataEntry",
+      orderBy: "current_date DESC",
+      limit: limit,
+    );
+    return maps.map((map) => FullDataEntry.fromJson(map)).toList();
   }
+
+
 
   Future<void> close() async {
     final db = await _getDB();
