@@ -61,7 +61,7 @@ class GearService {
   Future<GearItem?> getGearItemDetails(int gearItemId) async {
     final result = await db.query(
       'GearItem',
-      where: 'id = ?',
+      where: 'gear_item_id = ?',
       whereArgs: [gearItemId],
     );
 
@@ -76,7 +76,7 @@ class GearService {
     return await db.update(
       'GearItem',
       gearItem.toJson(),
-      where: 'id = ?',
+      where: 'gear_item_id = ?',
       whereArgs: [gearItem.id],
     );
   }
@@ -85,7 +85,7 @@ class GearService {
   Future<int> deleteGearItem(int gearItemId) async {
     return await db.delete(
       'GearItem',
-      where: 'id = ?',
+      where: 'gear_item_id = ?',
       whereArgs: [gearItemId],
     );
   }

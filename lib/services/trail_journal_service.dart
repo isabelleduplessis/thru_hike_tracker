@@ -143,4 +143,16 @@ class TrailJournalService {
       );
     }
   }
+  // 🔹 GET Gear Usage for a Trail Journal
+  Future<double> getMilesForGearInTrailJournal(int gearItemId, int trailJournalId) async {
+  final result = await db.rawQuery('''
+    SELECT SUM(fdg.miles_used) as totalMiles
+    FROM FullDataEntryGear fdg
+    JOIN FullDataEntry fde ON fdg.full_data_entry_id = fde.id
+    WHERE fdg.gear_item_id = ? AND fde.trail_journal_id = ?
+  ''', [gearItemId, trailJournalId]);
+
+  return (result.first['totalMiles'] as num?)?.toDouble() ?? 0.0;
+}
+
 }

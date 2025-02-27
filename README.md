@@ -6,6 +6,18 @@ Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, 
 
 ### Day To Day Progress and Goals
 
+**Feb 27, 2025**
+
+Completed:
+* Updated all gear models and services - complete for now
+* Updated all alternate route models and services - complete for now
+
+TODO:
+* Run test case
+* Check trail journal models and services
+* Check trail metadata models and services
+* Check user models and services
+
 **Feb 22, 2025**
 
 Completed:

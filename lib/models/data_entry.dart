@@ -3,17 +3,18 @@ import 'alternate_route.dart';
 import 'gear.dart';
 import 'dart:convert';
 
-
 // FullDataEntry class to represent a single row in the dataset corresponding to a single day on the trail
 class FullDataEntry {
   final int? id;
   final CoreDataEntry coreDataEntry;
+  final double completeDistance;
   final List<FullDataEntryAlternateRoute>? alternateRoutes;
   final OptionalFields? optionalFields;
 
   FullDataEntry({
     this.id,
     required this.coreDataEntry,
+    required this.completeDistance,
     this.alternateRoutes,
     this.optionalFields
   });
@@ -21,13 +22,16 @@ class FullDataEntry {
   factory FullDataEntry.fromJson(Map<String, dynamic> json) {
     return FullDataEntry(
       id: json['id'],
-      coreDataEntry: CoreDataEntry.fromJson(json),
+      coreDataEntry: CoreDataEntry.fromJson(json['core_data_entry']),
+      completeDistance: (json['complete_distance'] as num).toDouble(),
       alternateRoutes: json['alternate_route_ids'] != null
           ? (json['alternate_route_ids'] as String)
               .split(', ')
               .map((id) => FullDataEntryAlternateRoute(
                     fullDataEntryId: json['id'],
-                    alternateRouteId: int.parse(id)))
+                    alternateRouteId: int.parse(id),
+                    milesAdded: json['miles_added'],
+                    milesSkipped: json['miles_skipped']))
               .toList()
           : [],
       optionalFields: OptionalFields(
@@ -51,40 +55,34 @@ class FullDataEntry {
     );
   }
 
-
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'current_date': coreDataEntry.currentDate.toIso8601String(),
-      'start_mile': coreDataEntry.startMile,
-      'end_mile': coreDataEntry.endMile,
-      'trail_journal_id': coreDataEntry.trailJournal.id,
-
-      // Optional fields
+      'core_data_entry': coreDataEntry.toJson(),
+      'complete_distance': completeDistance,
+      'alternate_route_ids': alternateRoutes?.map((route) => route.alternateRouteId).join(', ') ?? '',
+      'miles_added': alternateRoutes?.map((route) => route.milesAdded).join(', ') ?? '',
+      'miles_skipped': alternateRoutes?.map((route) => route.milesSkipped).join(', ') ?? '',
       'start_location': optionalFields?.startLocation,
       'end_location': optionalFields?.endLocation,
       'camp_type': optionalFields?.campType,
       'elevation_gain': optionalFields?.elevationGain,
       'elevation_loss': optionalFields?.elevationLoss,
       'notes': optionalFields?.notes,
-
-      // CSV for towns
-      'town': optionalFields?.town?.join(', '),
-
-      // JSON strings for wildlife and custom fields
-      'wildlife': optionalFields?.wildlife != null ? jsonEncode(optionalFields!.wildlife) : null,
-      'custom_fields': optionalFields?.customFields.isNotEmpty == true ? jsonEncode(optionalFields!.customFields) : null,
-
-      // CSV for alternate routes and gear used
-      'alternate_route_ids': alternateRoutes?.map((a) => a.id).join(', '),
+      'town': optionalFields?.town?.join(', ') ?? '',
+      'wildlife': optionalFields?.wildlife != null
+          ? jsonEncode(optionalFields!.wildlife)
+          : jsonEncode({}),
       'gear_used': optionalFields?.gearUsed != null
           ? jsonEncode(optionalFields!.gearUsed!.map((g) => g.toJson()).toList())
-          : null,
+          : jsonEncode([]),
+      'custom_fields': optionalFields?.customFields != null
+          ? jsonEncode(optionalFields!.customFields)
+          : jsonEncode({}),
     };
+  }
 }
 
-
-}
 class CoreDataEntry{
   final DateTime currentDate;     
   final double startMile;      
@@ -126,7 +124,7 @@ class OptionalFields{
   final String? notes; 
   final List<String>? town; 
   final Map<String, int>? wildlife; 
-  final List<FullDataEntryGear>? gearUsed;  
+  final List<FullDataEntryGear>? gearUsed; 
   final Map<String, dynamic> customFields; 
 
   OptionalFields({

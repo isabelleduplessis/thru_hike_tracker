@@ -40,37 +40,44 @@ class AlternateRoute {
 
 class FullDataEntryAlternateRoute {
   final int? id;
-  final int fullDataEntryId;
-  final int alternateRouteId;
+  final int fullDataEntryId; // Links to FullDataEntry
+  final int alternateRouteId; // Links to AlternateRoute
   final bool startOnAlternate;
   final bool endOnAlternate;
+  final double milesAdded; // Daily miles added for this entry
+  final double milesSkipped; // Daily miles skipped for this entry
 
   FullDataEntryAlternateRoute({
     this.id,
     required this.fullDataEntryId,
     required this.alternateRouteId,
-    bool? startOnAlternate,
-    bool? endOnAlternate,
-  })  : startOnAlternate = startOnAlternate ?? false,
-        endOnAlternate = endOnAlternate ?? false;
+    this.startOnAlternate = false,
+    this.endOnAlternate = false,
+    required this.milesAdded,
+    required this.milesSkipped,
+  });
 
   factory FullDataEntryAlternateRoute.fromJson(Map<String, dynamic> json) {
     return FullDataEntryAlternateRoute(
       id: json['id'],
-      fullDataEntryId: json['fullDataEntryId'],
-      alternateRouteId: json['alternateRouteId'],
-      startOnAlternate: json['startOnAlternate'] ?? false,
-      endOnAlternate: json['endOnAlternate'] ?? false,
+      fullDataEntryId: json['full_data_entry_id'],
+      alternateRouteId: json['alternate_route_id'],
+      startOnAlternate: json['start_on_alternate'] ?? false,
+      endOnAlternate: json['end_on_alternate'] ?? false,
+      milesAdded: (json['miles_added'] as num).toDouble(),
+      milesSkipped: (json['miles_skipped'] as num).toDouble(),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'fullDataEntryId': fullDataEntryId,
-      'alternateRouteId': alternateRouteId,
-      'startOnAlternate': startOnAlternate,
-      'endOnAlternate': endOnAlternate,
+      'full_data_entry_id': fullDataEntryId,
+      'alternate_route_id': alternateRouteId,
+      'start_on_alternate': startOnAlternate,
+      'end_on_alternate': endOnAlternate,
+      'miles_added': milesAdded,
+      'miles_skipped': milesSkipped,
     };
   }
 }

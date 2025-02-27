@@ -161,7 +161,7 @@ class DatabaseHelper {
         // Gear item table - CRUD operations in gear_service.dart
         await db.execute('''
           CREATE TABLE gear_item (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            gear_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             type TEXT NOT NULL
           )
