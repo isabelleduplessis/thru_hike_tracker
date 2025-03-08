@@ -11,12 +11,12 @@ class TrailJournalService {
 
   TrailJournalService(this.db);
 
-  // 🔹 CREATE a new Trail Journal
+  // Create a new trail journal
   Future<int> createTrailJournal(Map<String, dynamic> journal) async {
     return await db.insert('TrailJournal', journal);
   }
 
-  // 🔹 READ a specific Trail Journal by ID
+  // Get trail journal by ID
   Future<Map<String, dynamic>?> getTrailJournal(int id) async {
     final List<Map<String, dynamic>> result = await db.query(
       'TrailJournal',

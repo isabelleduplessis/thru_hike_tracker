@@ -35,7 +35,6 @@ class DefinedTrail{
   final String trailName; // Name of the trail - can still select fr
   final double length; // Length of the trail
   final TrailStructure structure; // Structure of the trail (e.g., out-and-back, loop, point-to-point)
-  final TrailDirection defaultDirection; // Default direction of the trail (e.g. NOBO for PCT)
   final List<Section> sections;
 
   DefinedTrail({
@@ -44,7 +43,6 @@ class DefinedTrail{
     required this.trailName,
     required this.length,
     required this.structure,
-    required this.defaultDirection,
     this.sections = const [],
   });
 
@@ -56,9 +54,6 @@ class DefinedTrail{
     length: json['length'] as double,
     structure: TrailStructure.values.firstWhere(
       (e) => e.toString() == 'TrailStructure.${json['structure']}',
-    ),
-    defaultDirection: TrailDirection.values.firstWhere(
-      (e) => e.toString() == 'TrailDirection.${json['defaultDirection']}',
     ),
     sections: json['sections'] != null
           ? List<Section>.from(json['sections'].map((e) => Section.fromJson(e)))
@@ -74,7 +69,6 @@ class DefinedTrail{
       'trailName': trailName,
       'length': length,
       'structure': structure.toString().split('.').last,
-      'defaultDirection': defaultDirection.toString().split('.').last,
       'sections': sections.map((e) => e.toJson()).toList(),
     };
   }
@@ -86,7 +80,6 @@ class CustomTrail {
   final String trailName; // User-defined name for the trail
   final double length; // User-defined length for the trail
   final TrailStructure structure; // User-defined structure for the trail
-  final TrailDirection defaultDirection; // User-defined default direction for the trail
   final List<Section> sections;
 
   CustomTrail({
@@ -95,7 +88,6 @@ class CustomTrail {
     required this.trailName,
     required this.length,
     required this.structure,
-    required this.defaultDirection,
     this.sections = const [],
   });
 
@@ -107,9 +99,6 @@ class CustomTrail {
       length: json['length'] as double,
       structure: TrailStructure.values.firstWhere(
         (e) => e.toString() == 'TrailStructure.${json['structure']}',
-      ),
-      defaultDirection: TrailDirection.values.firstWhere(
-        (e) => e.toString() == 'TrailDirection.${json['defaultDirection']}',
       ),
       sections: json['sections'] != null
           ? List<Section>.from(json['sections'].map((e) => Section.fromJson(e)))
@@ -124,7 +113,6 @@ class CustomTrail {
       'trailName': trailName,
       'length': length,
       'structure': structure.toString().split('.').last,
-      'defaultDirection': defaultDirection.toString().split('.').last,
       'sections': sections.map((e) => e.toJson()).toList(),
     };
   }

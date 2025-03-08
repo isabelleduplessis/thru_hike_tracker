@@ -138,12 +138,12 @@ class DatabaseHelper {
         await db.execute('''
           CREATE TABLE trail_journal(
             id INTEGER PRIMARY KEY, 
-            trailName TEXT, 
-            startDate TEXT, 
-            direction TEXT, 
-            trailType TEXT, 
-            initialLength REAL, -- Refers to length of trail without alternate routes
-            totalLength REAL,   -- Total length of the trail including alternate routes
+            trail_name TEXT, 
+            start_date TEXT, 
+            initial_direction TEXT, 
+            trail_type TEXT, 
+            initial_length REAL, -- Refers to length of trail without alternate routes
+            total_length REAL,   -- Total length of the trail including alternate routes
             totalMilesHiked REAL,   -- Total miles hiked (calculated from FullDataEntry sum)
             trailMilesHiked REAL,   -- Total miles hiked on the trail excluding alternates, based on last recorded trail mile marker
             totalMilesAdded REAL,   -- Total miles added from alternate routes
@@ -197,11 +197,9 @@ class DatabaseHelper {
         await db.execute('''
           CREATE TABLE trail_metadata(
             trail_id TEXT PRIMARY KEY, 
-            trail_name TEXT, 
-            trail_type TEXT, 
+            trail_name TEXT,
             trail_length REAL, 
-            trail_structure TEXT, 
-            trail_direction TEXT
+            trail_structure TEXT,
           )
         ''');
         // Section table - CRUD operations in trail_metadata_service.dart

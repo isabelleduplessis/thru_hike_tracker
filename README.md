@@ -2,9 +2,17 @@
 
 Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, view statistics based on daily mileage entries, keep a journal, and update friends and family along the way. Existing hike-tracking apps do not allow users to keep track of on-trail vs off-trail miles, alternate routes, or skips, but Thru-Hike Tracker will allow users to accurately document their hike even when things don't go as planned.
 
+![Database Schema](notes/thru_hike_tracker_schema.png)
+
 ## Progress Log
 
 ### Day To Day Progress and Goals
+
+**Mar 7, 2025**
+
+Completed:
+* EERD for ease on brain - should have done this first
+
 
 **Feb 27, 2025**
 

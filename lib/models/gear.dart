@@ -1,6 +1,8 @@
 
 // Offer user option to enter shoes and custom gear. If they enter something in shoe field, type is automatically shoe
 // If they enter something in custom field, type is automatically whatever type they entered
+
+// track # nights gear has been used?
 class GearItem {
   final int? id;
   final String name; // e.g., "Altra Lone Peak 7"
