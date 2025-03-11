@@ -11,7 +11,11 @@ Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, 
 **Mar 7, 2025**
 
 Completed:
-* EERD for ease on brain - should have done this first
+* EERD - should have done this first
+
+TODO: 
+* Review variable names for consistency
+* Database services - review existing functions and make plan/pseudocode for other functions
 
 
 **Feb 27, 2025**
@@ -21,7 +25,6 @@ Completed:
 * Updated all alternate route models and services - complete for now
 
 TODO:
-* Run test case
 * Check trail journal models and services
 * Check trail metadata models and services
 * Check user models and services
@@ -40,7 +43,7 @@ Completed:
     * Started working on insert statements for these tables
 
 TODO:
-* Make sure foreign keys are right
+* ~~Make sure foreign keys are right~~
 * Finish insert statements for these tables and others
 * Work on update and delete statements
 
@@ -51,9 +54,8 @@ Completed:
 * Removed formula model and service - will just stick to predefined calculations for now
 
 TODO:
-* Confirm columns in each table
+* ~~Confirm columns in each table~~
     * ~~confirmed for data entry related tables~~
-* Create CRUD operations for each table
 
 **Feb 5, 2025**
 * Created sections model and linked to trail metadata
@@ -62,7 +64,7 @@ TODO:
 
 TODO:
 * ~~Section database service~~
-* Ensure no ID conflicts between custom trails and defined trails
+* Ensure no ID conflicts between custom trails and defined trails - later
 
 
 **Feb 4, 2025**
@@ -78,7 +80,7 @@ Completed:
     * Created distinct gear_service.dart file and created all CRUD operations for gear
 
 TODO:
-* Try to test some of the code? VScode says no syntax errors so far
+* Try to test some of the code?
 
 
 **Feb 2, 2025**
