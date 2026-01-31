@@ -24,7 +24,7 @@ class DatabaseHelper {
     _database = await openDatabase(
       join(await getDatabasesPath(), _dbName),
       onOpen: (db) async {
-        await db.execute('PRAGMA foreign_keys = ON;');
+        await db.execute('PRAGMA foreign_keys = ON;'); //what does this mean
       },
       onCreate: (db, version) async {
 
@@ -258,6 +258,7 @@ class DatabaseHelper {
       limit: limit,
     );
     return maps.map((map) => FullDataEntry.fromJson(map)).toList();
+    //return null if map is empty?
   }
 
 

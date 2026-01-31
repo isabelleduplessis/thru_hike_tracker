@@ -11,7 +11,7 @@ class FullDataEntry {
   final List<FullDataEntryAlternateRoute>? alternateRoutes;
   final OptionalFields? optionalFields;
 
-  FullDataEntry({
+  FullDataEntry({ //Do I need const variable at start of this line?
     this.id,
     required this.coreDataEntry,
     required this.completeDistance,
