@@ -1,65 +1,86 @@
+// models/gear.dart
+// Represents a piece of hiking gear (boots, tent, pack, etc.)
 
-// Offer user option to enter shoes and custom gear. If they enter something in shoe field, type is automatically shoe
-// If they enter something in custom field, type is automatically whatever type they entered
-
-// track # nights gear has been used?
-class GearItem {
+class Gear {
   final int? id;
-  final String name; // e.g., "Altra Lone Peak 7"
-  final String type; // "Shoes", "Backpack", etc.
-
-  GearItem({
+  final String name;
+  final String? category; // "Footwear", "Shelter", "Pack", etc.
+  
+  Gear({
     this.id,
     required this.name,
-    required this.type,
+    this.category,
   });
-
-  Map<String, dynamic> toJson() {
-    final data = {
+  
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
       'name': name,
-      'type': type,
+      'category': category,
     };
-    if (id != null) data['id'] = id.toString();
-    return data;
   }
-
-  factory GearItem.fromJson(Map<String, dynamic> json) {
-    return GearItem(
-      id: json['id'] as int?,
-      name: json['name'] as String,
-      type: json['type'] as String,
+  
+  factory Gear.fromMap(Map<String, dynamic> map) {
+    return Gear(
+      id: map['id'] as int?,
+      name: map['name'] as String,
+      category: map['category'] as String?,
+    );
+  }
+  
+  Gear copyWith({
+    int? id,
+    String? name,
+    String? category,
+  }) {
+    return Gear(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
     );
   }
 }
 
-
-class FullDataEntryGear {
-  final int? id;
-  final int gearItemId; // Foreign key linking to GearItem
-  final double milesUsed; // Miles logged for this gear item in one entry
-
-  FullDataEntryGear({
-    this.id,
-    required this.gearItemId,
-    this.milesUsed = 0.0,
+// This represents the link between an Entry and Gear
+// "On this day, I used these pieces of gear"
+class EntryGear {
+  final int entryId;
+  final int gearId;
+  
+  EntryGear({
+    required this.entryId,
+    required this.gearId,
   });
-
-  factory FullDataEntryGear.fromJson(Map<String, dynamic> json) {
-    return FullDataEntryGear(
-      id: json['id'] as int?,
-      gearItemId: json['gear_item_id'] as int,
-      milesUsed: (json['miles_used'] as num?)?.toDouble() ?? 0.0,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    final data = {
-      'gear_item_id': gearItemId,
-      'miles_used': milesUsed,
+  
+  Map<String, dynamic> toMap() {
+    return {
+      'entry_id': entryId,
+      'gear_id': gearId,
     };
-    if (id != null) data['id'] = id as num;
-    return data;
+  }
+  
+  factory EntryGear.fromMap(Map<String, dynamic> map) {
+    return EntryGear(
+      entryId: map['entry_id'] as int,
+      gearId: map['gear_id'] as int,
+    );
   }
 }
 
-
+// This holds calculated stats for a piece of gear
+// Not stored in database - calculated on the fly
+class GearStats {
+  final Gear gear;
+  final double totalMiles;
+  final int daysUsed;
+  final DateTime? firstUsed;
+  final DateTime? lastUsed;
+  
+  GearStats({
+    required this.gear,
+    required this.totalMiles,
+    required this.daysUsed,
+    this.firstUsed,
+    this.lastUsed,
+  });
+}
