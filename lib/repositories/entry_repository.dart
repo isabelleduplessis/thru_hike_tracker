@@ -165,4 +165,18 @@ class EntryRepository {
     
     return (result.first['count'] as int?) ?? 0;
   }
+  // Get all entries for a trip ordered by date (for chart)
+  Future<List<Entry>> getEntriesForTripChronological(int tripId) async {
+    final db = await _dbHelper.database;
+    
+    final maps = await db.query(
+      'entries',
+      where: 'trip_id = ?',
+      whereArgs: [tripId],
+      orderBy: 'date ASC',  // Oldest first for chart
+    );
+    
+    return maps.map((map) => Entry.fromMap(map)).toList();
+  }
+
 }

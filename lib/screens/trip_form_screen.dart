@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/trip.dart';
 import '../repositories/trip_repository.dart';
+import '../models/custom_field.dart';
+import '../repositories/custom_field_repository.dart';
 
 class TripFormScreen extends StatefulWidget {
   final Trip? trip;  // null = creating new, not null = editing existing
@@ -25,12 +27,16 @@ class _TripFormScreenState extends State<TripFormScreen> {
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
   TripStatus _status = TripStatus.active;
+  final CustomFieldRepository _customFieldRepository = CustomFieldRepository();
+  List<CustomField> _availableFields = [];  // All existing fields
+  List<CustomField> _selectedFields = [];   // Fields selected for this trip
   
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
+    _loadCustomFields();
     
     // If editing existing trip, populate the form
     if (widget.trip != null) {
@@ -40,6 +46,25 @@ class _TripFormScreenState extends State<TripFormScreen> {
       _startDate = trip.startDate;
       _endDate = trip.endDate;
       _status = trip.status;
+      
+      // Load custom fields for this trip
+      _loadTripCustomFields();
+    }
+  }
+
+  Future<void> _loadCustomFields() async {
+    final fields = await _customFieldRepository.getAllCustomFields();
+    setState(() {
+      _availableFields = fields;
+    });
+  }
+
+  Future<void> _loadTripCustomFields() async {
+    if (widget.trip != null) {
+      final fields = await _customFieldRepository.getCustomFieldsForTrip(widget.trip!.id!);
+      setState(() {
+        _selectedFields = fields;
+      });
     }
   }
 
@@ -61,20 +86,29 @@ class _TripFormScreenState extends State<TripFormScreen> {
     
     try {
       final trip = Trip(
-        id: widget.trip?.id,  // Keep ID if editing, null if creating
+        id: widget.trip?.id,
         name: _nameController.text.trim(),
         startDate: _startDate,
         startMile: double.tryParse(_startMileController.text) ?? 0.0,
         status: _status,
         endDate: _endDate,
       );
-      
-      if (widget.trip == null) {
-        // Creating new trip
-        await _tripRepository.createTrip(trip);
-      } else {
-        // Updating existing trip
-        await _tripRepository.updateTrip(trip);
+
+      Trip savedTrip;
+        if (widget.trip == null) {
+          // Creating new trip
+          savedTrip = await _tripRepository.createTrip(trip);
+        } else {
+          // Updating existing trip
+          await _tripRepository.updateTrip(trip);
+          savedTrip = trip;
+        }
+      // Save custom fields for this trip
+      if (_selectedFields.isNotEmpty) {
+        await _customFieldRepository.setCustomFieldsForTrip(
+          savedTrip.id!,
+          _selectedFields,
+        );
       }
       
       if (mounted) {
@@ -300,6 +334,13 @@ class _TripFormScreenState extends State<TripFormScreen> {
             ),
             
             const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            // Custom Fields Section
+            _buildCustomFieldsSection(),
+
+            const SizedBox(height: 24),
             
             // Save Button
             FilledButton(
@@ -322,5 +363,249 @@ class _TripFormScreenState extends State<TripFormScreen> {
         ),
       ),
     );
+  }
+  Widget _buildCustomFieldsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Custom Fields',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            TextButton.icon(
+              onPressed: _showAddFieldDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Field'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_selectedFields.isEmpty)
+          const Text(
+            'No custom fields yet. Add fields to track specific data for this hike.',
+            style: TextStyle(color: Colors.grey),
+          )
+        else
+          ReorderableListView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            onReorder: (oldIndex, newIndex) {
+              setState(() {
+                if (newIndex > oldIndex) {
+                  newIndex -= 1;
+                }
+                final field = _selectedFields.removeAt(oldIndex);
+                _selectedFields.insert(newIndex, field);
+              });
+            },
+            children: _selectedFields.map((field) {
+              return ListTile(
+                key: ValueKey(field.id),
+                leading: const Icon(Icons.drag_handle),
+                title: Text(field.name),
+                subtitle: Text(_getFieldTypeLabel(field.type)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    setState(() {
+                      _selectedFields.remove(field);
+                    });
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  String _getFieldTypeLabel(CustomFieldType type) {
+    switch (type) {
+      case CustomFieldType.text:
+        return 'Text';
+      case CustomFieldType.number:
+        return 'Number';
+      case CustomFieldType.checkbox:
+        return 'Checkbox';
+      case CustomFieldType.rating:
+        return 'Rating (1-5)';
+    }
+  }
+
+  void _showAddFieldDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => _AddCustomFieldDialog(
+        availableFields: _availableFields,
+        selectedFields: _selectedFields,
+        onFieldsSelected: (fields) {
+          setState(() {
+            _selectedFields = fields;
+          });
+        },
+        onCreateNew: (field) async {
+          final created = await _customFieldRepository.createCustomField(field);
+          setState(() {
+            _availableFields.add(created);
+            _selectedFields.add(created);
+          });
+        },
+      ),
+    );
+  }
+}
+
+class _AddCustomFieldDialog extends StatefulWidget {
+  final List<CustomField> availableFields;
+  final List<CustomField> selectedFields;
+  final Function(List<CustomField>) onFieldsSelected;
+  final Function(CustomField) onCreateNew;
+  
+  const _AddCustomFieldDialog({
+    required this.availableFields,
+    required this.selectedFields,
+    required this.onFieldsSelected,
+    required this.onCreateNew,
+  });
+
+  @override
+  State<_AddCustomFieldDialog> createState() => _AddCustomFieldDialogState();
+}
+
+class _AddCustomFieldDialogState extends State<_AddCustomFieldDialog> {
+  bool _showCreateNew = false;
+  final _nameController = TextEditingController();
+  CustomFieldType _selectedType = CustomFieldType.text;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_showCreateNew) {
+      return AlertDialog(
+        title: const Text('Create Custom Field'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Field Name',
+                hintText: 'e.g., Bear sightings, weather, ',
+              ),
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<CustomFieldType>(
+              value: _selectedType,
+              decoration: const InputDecoration(
+                labelText: 'Field Type',
+              ),
+              items: CustomFieldType.values.map((type) {
+                return DropdownMenuItem(
+                  value: type,
+                  child: Text(_getTypeLabel(type)),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedType = value;
+                  });
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _showCreateNew = false;
+              });
+            },
+            child: const Text('Back'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (_nameController.text.trim().isNotEmpty) {
+                widget.onCreateNew(CustomField(
+                  name: _nameController.text.trim(),
+                  type: _selectedType,
+                ));
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      );
+    }
+
+    // Show existing fields to select from
+    final unselectedFields = widget.availableFields
+        .where((f) => !widget.selectedFields.any((s) => s.id == f.id))
+        .toList();
+
+    return AlertDialog(
+      title: const Text('Add Custom Field'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (unselectedFields.isEmpty)
+              const Text('All existing fields added.')
+            else
+              ...unselectedFields.map((field) {
+                return ListTile(
+                  title: Text(field.name),
+                  subtitle: Text(_getTypeLabel(field.type)),
+                  onTap: () {
+                    widget.onFieldsSelected([...widget.selectedFields, field]);
+                    Navigator.pop(context);
+                  },
+                );
+              }),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.add_circle),
+              title: const Text('Create New Field'),
+              onTap: () {
+                setState(() {
+                  _showCreateNew = true;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+
+  String _getTypeLabel(CustomFieldType type) {
+    switch (type) {
+      case CustomFieldType.text:
+        return 'Text';
+      case CustomFieldType.number:
+        return 'Number';
+      case CustomFieldType.checkbox:
+        return 'Checkbox';
+      case CustomFieldType.rating:
+        return 'Rating (1-5)';
+    }
   }
 }

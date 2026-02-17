@@ -8,6 +8,8 @@ import '../models/entry.dart';
 import '../repositories/entry_repository.dart';
 import '../models/gear.dart';
 import '../repositories/gear_repository.dart';
+import '../models/custom_field.dart';
+import '../repositories/custom_field_repository.dart';
 
 class EntryFormScreen extends StatefulWidget {
   final Trip trip;
@@ -44,6 +46,11 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   bool? _isTent;  // true = tent, false = shelter, null = not set
   bool _hadShower = false;
   bool _isSaving = false;
+  final CustomFieldRepository _customFieldRepository = CustomFieldRepository();
+  List<CustomFieldWithValue> _customFields = [];
+  Map<int, TextEditingController> _customFieldControllers = {};  // For text/number fields
+  Map<int, bool> _customFieldYesNo = {};  // For yes/no fields
+  Map<int, int> _customFieldRatings = {};  // For rating fields
   // non text inputs use state variables
 
 
@@ -51,6 +58,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   void initState() {
     super.initState();
     _loadGear();
+    _loadCustomFields();
     
     // If editing existing entry, populate the form
     if (widget.entry != null) {
@@ -75,16 +83,49 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       _skippedMilesController.text = '0.0';
     }
   }
+
+  Future<void> _loadCustomFields() async {
+    final fieldsWithValues = await _customFieldRepository.getCustomFieldsWithValues(
+      widget.trip.id!,
+      widget.entry?.id ?? 0,  // 0 if creating new entry
+    );
+    
+    setState(() {
+      _customFields = fieldsWithValues;
+      
+      // Initialize controllers and values
+      for (var fieldWithValue in fieldsWithValues) {
+        final field = fieldWithValue.field;
+        final value = fieldWithValue.value ?? '';
+        
+        if (field.type == CustomFieldType.text || field.type == CustomFieldType.number) {
+          // For new entries, default number fields to '0'
+          final defaultValue = (widget.entry == null && field.type == CustomFieldType.number && value.isEmpty) ? '0' : value;
+          _customFieldControllers[field.id!] = TextEditingController(text: defaultValue);
+        } else if (field.type == CustomFieldType.checkbox) {
+          _customFieldYesNo[field.id!] = value == 'true';
+        } else if (field.type == CustomFieldType.rating) {
+          _customFieldRatings[field.id!] = int.tryParse(value) ?? 0;
+        }
+      }
+    });
+  }
   
   @override
   void dispose() {
-    // IMPORTANT: Clean up controllers when widget is disposed
+    // Clean up controllers when widget is disposed
     _startMileController.dispose();
     _endMileController.dispose();
     _extraMilesController.dispose();
     _skippedMilesController.dispose();
     _locationController.dispose();
     _notesController.dispose();
+    
+    // Clean up custom field controllers
+    for (var controller in _customFieldControllers.values) {
+      controller.dispose();
+    }
+    
     super.dispose();
   }
   
@@ -154,6 +195,39 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
 
       // Save gear linkages
       await _gearRepository.setGearForEntry(savedEntry.id!, _selectedGearIds);
+
+      //custom fields
+      final customFieldValues = <int, String>{};
+      for (var fieldWithValue in _customFields) {
+        final field = fieldWithValue.field;
+        String value = '';
+        
+        if (field.type == CustomFieldType.text || field.type == CustomFieldType.number) {
+        // For new entries, default number fields to '0'
+        final defaultValue = (widget.entry == null && field.type == CustomFieldType.number && value.isEmpty) ? '0' : value;
+        _customFieldControllers[field.id!] = TextEditingController(text: defaultValue);
+      } else if (field.type == CustomFieldType.checkbox) {
+          value = (_customFieldYesNo[field.id!] ?? false).toString();
+        } else if (field.type == CustomFieldType.rating) {
+          final rating = _customFieldRatings[field.id!] ?? 0;
+          if (rating > 0) {
+            value = rating.toString();
+          }
+        }
+        
+        if (value.isNotEmpty) {
+          customFieldValues[field.id!] = value;
+        }
+      }
+
+      if (customFieldValues.isNotEmpty) {
+        await _customFieldRepository.saveCustomFieldValues(
+          savedEntry.id!,
+          customFieldValues,
+        );
+      }
+
+
       
       // Return to previous screen with success
       if (mounted) {
@@ -225,17 +299,22 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
             // Shower switch
             _buildShowerSwitch(),
             const SizedBox(height: 16),
-            
-            // Notes
-            _buildNotesInput(),
-            const SizedBox(height: 24),
+
+            // Custom Fields
+            if (_customFields.isNotEmpty) ...[
+              _buildCustomFieldsSection(),
+              const SizedBox(height: 16),
+            ],
 
             // Gear selection
             if (_availableGear.isNotEmpty) ...[
               _buildGearSelector(),
               const SizedBox(height: 16),
             ],
-            
+            // Notes
+            _buildNotesInput(),
+            const SizedBox(height: 24),
+
             // Save button
             FilledButton(
               onPressed: _isSaving ? null : _saveEntry,
@@ -447,7 +526,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Track Gear',
+          'Gear',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
@@ -474,5 +553,122 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       ],
     );
   }
-  
+  Widget _buildCustomFieldsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        ..._customFields.map((fieldWithValue) {
+          return _buildCustomFieldInput(fieldWithValue.field);
+        }),
+      ],
+    );
+  }
+  Widget _buildCustomFieldInput(CustomField field) {
+    switch (field.type) {
+      case CustomFieldType.text:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 150,
+                child: Text(
+                  '${field.name}:',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+              Expanded(
+                child: TextFormField(
+                  controller: _customFieldControllers[field.id!],
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+        
+      case CustomFieldType.number:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Text(
+                '${field.name}:',
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 80,
+                child: TextFormField(
+                  controller: _customFieldControllers[field.id!],
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        );
+        
+      case CustomFieldType.checkbox:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Text(
+                '${field.name}:',
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(width: 16),
+              Checkbox(
+                value: _customFieldYesNo[field.id!] ?? false,
+                onChanged: (value) {
+                  setState(() {
+                    _customFieldYesNo[field.id!] = value ?? false;
+                  });
+                },
+              ),
+            ],
+          ),
+        );
+        
+      case CustomFieldType.rating:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Text(
+                '${field.name}:',
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(width: 16),
+              ...List.generate(5, (index) {
+                final rating = _customFieldRatings[field.id!] ?? 0;
+                return IconButton(
+                  icon: Icon(
+                    index < rating ? Icons.star : Icons.star_border,
+                    color: Colors.amber,
+                    size: 28,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    setState(() {
+                      _customFieldRatings[field.id!] = index + 1;
+                    });
+                  },
+                );
+              }),
+            ],
+          ),
+        );
+    }
+  }
 }

@@ -29,7 +29,7 @@ class DatabaseHelper {
     // version: used for migrations (when we change the schema)
     return await openDatabase(
       path,
-      version: 2,  // ← Change from 1 to 2
+      version: 3,  // 
       onCreate: _createDB,
       onUpgrade: _onUpgrade,  // ← Add this line
     );
@@ -40,6 +40,39 @@ class DatabaseHelper {
     if (oldVersion < 2) {
       // Add direction column to existing entries table
       await db.execute('ALTER TABLE entries ADD COLUMN direction INTEGER');
+    }
+    
+    if (oldVersion < 3) {
+      // Add custom fields tables
+      await db.execute('''
+        CREATE TABLE custom_fields (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          type INTEGER NOT NULL
+        )
+      ''');
+      
+      await db.execute('''
+        CREATE TABLE trip_custom_fields (
+          trip_id INTEGER NOT NULL,
+          custom_field_id INTEGER NOT NULL,
+          display_order INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (trip_id, custom_field_id),
+          FOREIGN KEY (trip_id) REFERENCES trips (id) ON DELETE CASCADE,
+          FOREIGN KEY (custom_field_id) REFERENCES custom_fields (id) ON DELETE CASCADE
+        )
+      ''');
+      
+      await db.execute('''
+        CREATE TABLE custom_field_values (
+          entry_id INTEGER NOT NULL,
+          custom_field_id INTEGER NOT NULL,
+          value TEXT NOT NULL,
+          PRIMARY KEY (entry_id, custom_field_id),
+          FOREIGN KEY (entry_id) REFERENCES entries (id) ON DELETE CASCADE,
+          FOREIGN KEY (custom_field_id) REFERENCES custom_fields (id) ON DELETE CASCADE
+        )
+      ''');
     }
   }
 
@@ -94,6 +127,39 @@ class DatabaseHelper {
         PRIMARY KEY (entry_id, gear_id),
         FOREIGN KEY (entry_id) REFERENCES entries (id) ON DELETE CASCADE,
         FOREIGN KEY (gear_id) REFERENCES gear (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // CUSTOM FIELDS TABLE
+    await db.execute('''
+      CREATE TABLE custom_fields (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type INTEGER NOT NULL
+      )
+    ''');
+
+    // TRIP_CUSTOM_FIELDS TABLE (many-to-many: trips <-> custom_fields)
+    await db.execute('''
+      CREATE TABLE trip_custom_fields (
+        trip_id INTEGER NOT NULL,
+        custom_field_id INTEGER NOT NULL,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (trip_id, custom_field_id),
+        FOREIGN KEY (trip_id) REFERENCES trips (id) ON DELETE CASCADE,
+        FOREIGN KEY (custom_field_id) REFERENCES custom_fields (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // CUSTOM FIELD VALUES TABLE (stores actual entry values)
+    await db.execute('''
+      CREATE TABLE custom_field_values (
+        entry_id INTEGER NOT NULL,
+        custom_field_id INTEGER NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (entry_id, custom_field_id),
+        FOREIGN KEY (entry_id) REFERENCES entries (id) ON DELETE CASCADE,
+        FOREIGN KEY (custom_field_id) REFERENCES custom_fields (id) ON DELETE CASCADE
       )
     ''');
     
