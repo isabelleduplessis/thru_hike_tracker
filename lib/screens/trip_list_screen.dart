@@ -180,7 +180,7 @@ class _TripListScreenState extends State<TripListScreen> {
 
   Color _getStatusColor(TripStatus status) {
     switch (status) {
-      case TripStatus.planning:
+      case TripStatus.paused:
         return Colors.blue;
       case TripStatus.active:
         return Colors.green;
@@ -191,8 +191,8 @@ class _TripListScreenState extends State<TripListScreen> {
 
   String _getStatusText(TripStatus status) {
     switch (status) {
-      case TripStatus.planning:
-        return 'Planning';
+      case TripStatus.paused:
+        return 'Paused';
       case TripStatus.active:
         return 'Active';
       case TripStatus.completed:

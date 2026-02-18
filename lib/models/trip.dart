@@ -69,7 +69,7 @@ class Trip {
 // Enum for trip status
 // Enums are type-safe constants - can only be these values
 enum TripStatus {
-  planning,  // index 0
-  active,    // index 1
-  completed, // index 2
+  active, 
+  paused, 
+  completed,
 }

@@ -312,13 +312,14 @@ class _TripFormScreenState extends State<TripFormScreen> {
               ),
               items: const [
                 DropdownMenuItem(
-                  value: TripStatus.planning,
-                  child: Text('Planning'),
-                ),
-                DropdownMenuItem(
                   value: TripStatus.active,
                   child: Text('Active'),
+                ),                
+                DropdownMenuItem(
+                  value: TripStatus.paused,
+                  child: Text('Paused'),
                 ),
+
                 DropdownMenuItem(
                   value: TripStatus.completed,
                   child: Text('Completed'),
