@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import '../models/gear.dart';
 import '../repositories/gear_repository.dart';
+import 'package:intl/intl.dart';
 
 class GearFormScreen extends StatefulWidget {
   final Gear? gear;  // null = creating new, not null = editing
@@ -21,6 +22,11 @@ class _GearFormScreenState extends State<GearFormScreen> {
   // Controllers for text inputs
   final _nameController = TextEditingController();
   final _categoryController = TextEditingController();
+  DateTime _startDate = DateTime.now();
+  DateTime? _endDate;
+  bool _isRetired = false;
+  DateTime? _lastUsedDate;
+  bool _isLoadingLastUse = false;
   
   bool _isSaving = false;
 
@@ -28,11 +34,29 @@ class _GearFormScreenState extends State<GearFormScreen> {
   void initState() {
     super.initState();
     
-    // If editing existing gear, populate the form
     if (widget.gear != null) {
       _nameController.text = widget.gear!.name;
       _categoryController.text = widget.gear!.category ?? '';
+      _startDate = widget.gear!.startDate;
+      _endDate = widget.gear!.endDate;
+      _isRetired = widget.gear!.endDate != null;
+      _loadLastUsedDate();
     }
+  }
+
+  Future<void> _loadLastUsedDate() async {
+    if (widget.gear?.id == null) return;
+    
+    setState(() {
+      _isLoadingLastUse = true;
+    });
+    
+    final lastDate = await _gearRepository.getLastUsedDate(widget.gear!.id!);
+    
+    setState(() {
+      _lastUsedDate = lastDate;
+      _isLoadingLastUse = false;
+    });
   }
 
   @override
@@ -46,6 +70,21 @@ class _GearFormScreenState extends State<GearFormScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+
+    // Validate end date isn't before last use
+    if (_isRetired && _endDate != null && _lastUsedDate != null) {
+      if (_endDate!.isBefore(_lastUsedDate!)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Cannot retire gear before last use (${DateFormat('MMM dd, yyyy').format(_lastUsedDate!)})',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
     
     setState(() {
       _isSaving = true;
@@ -58,6 +97,8 @@ class _GearFormScreenState extends State<GearFormScreen> {
         category: _categoryController.text.trim().isEmpty 
             ? null 
             : _categoryController.text.trim(),
+        startDate: _startDate,
+        endDate: _isRetired ? _endDate ?? DateTime.now() : null, // what does the datetime.now() do? 
       );
       
       if (widget.gear == null) {
@@ -172,6 +213,113 @@ class _GearFormScreenState extends State<GearFormScreen> {
               textCapitalization: TextCapitalization.words,
             ),
             
+            const SizedBox(height: 16),
+
+            // Start Date
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Start Date'),
+              subtitle: Text(
+                DateFormat('MMM dd, yyyy').format(_startDate),
+                style: const TextStyle(fontSize: 16),
+              ),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _startDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (picked != null) {
+                  setState(() {
+                    _startDate = picked;
+                  });
+                }
+              },
+            ),
+
+            const Divider(),
+
+            // Status Toggle
+            Row(
+              children: [
+                const Text('Status:', style: TextStyle(fontSize: 16)),
+                const SizedBox(width: 16),
+                ChoiceChip(
+                  label: const Text('Active'),
+                  selected: !_isRetired,
+                  onSelected: (selected) {
+                    setState(() {
+                      _isRetired = false;
+                      _endDate = null;
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Retired'),
+                  selected: _isRetired,
+                  onSelected: (selected) {
+                    setState(() {
+                      _isRetired = true;
+                      _endDate = _endDate ?? DateTime.now();
+                    });
+                  },
+                ),
+              ],
+            ),
+
+            // End Date (only if retired)
+            if (_isRetired) ...[
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('End Date'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _endDate != null
+                          ? DateFormat('MMM dd, yyyy').format(_endDate!)
+                          : 'Not set',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    if (_lastUsedDate != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Last used: ${DateFormat('MMM dd, yyyy').format(_lastUsedDate!)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _endDate ?? (_lastUsedDate ?? DateTime.now()),
+                    firstDate: _lastUsedDate ?? _startDate,  // ← Can't be before last use
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    helpText: _lastUsedDate != null
+                        ? 'Must be on or after last use'
+                        : null,
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _endDate = picked;
+                    });
+                  }
+                },
+              ),
+            ],
+
+            const Divider(),
+
             const SizedBox(height: 24),
             
             FilledButton(

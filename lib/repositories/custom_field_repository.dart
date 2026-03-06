@@ -299,6 +299,68 @@ class CustomFieldRepository {
     
     return stats;
   }
+  Future<List<CustomFieldStat>> getCustomFieldStatsForEntries(
+    int tripId,
+    List<int> entryIds,
+  ) async {
+    if (entryIds.isEmpty) return [];
+    final fields = await getCustomFieldsForTrip(tripId);
+    final stats = <CustomFieldStat>[];
+
+    for (final field in fields) {
+      if (field.type == CustomFieldType.text) continue;
+
+      final placeholders = entryIds.map((_) => '?').join(', ');
+      final db = await _dbHelper.database;
+      final maps = await db.rawQuery('''
+        SELECT value FROM custom_field_values
+        WHERE custom_field_id = ? AND entry_id IN ($placeholders)
+      ''', [field.id!, ...entryIds]);
+
+      final values = maps.map((m) => m['value'] as String).toList();
+      if (values.isEmpty) continue;
+
+      if (field.type == CustomFieldType.number) {
+        final total = values
+            .map((v) => double.tryParse(v) ?? 0.0)
+            .fold(0.0, (sum, v) => sum + v);
+        if (total > 0) {
+          stats.add(CustomFieldStat(
+            field: field,
+            displayValue: total % 1 == 0
+                ? total.toInt().toString()
+                : total.toStringAsFixed(1),
+            label: 'total',
+          ));
+        }
+      } else if (field.type == CustomFieldType.rating) {
+        final ratings = values
+            .map((v) => double.tryParse(v) ?? 0.0)
+            .where((v) => v > 0)
+            .toList();
+        if (ratings.isNotEmpty) {
+          final avg = ratings.fold(0.0, (sum, v) => sum + v) / ratings.length;
+          stats.add(CustomFieldStat(
+            field: field,
+            displayValue: avg.toStringAsFixed(1),
+            label: 'avg rating',
+          ));
+        }
+      } else if (field.type == CustomFieldType.checkbox) {
+        final count = values.where((v) => v == 'true').length;
+        if (count > 0) {
+          stats.add(CustomFieldStat(
+            field: field,
+            displayValue: count.toString(),
+            label: 'days checked',
+          ));
+        }
+      }
+    }
+
+    return stats;
+  }
+
 }
 
 // so repositories are where calculations happen

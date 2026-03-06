@@ -50,6 +50,7 @@ class _TripListScreenState extends State<TripListScreen> {
           : _trips.isEmpty
               ? _buildEmptyState()
               : _buildTripList(),
+      
       floatingActionButton: FloatingActionButton( 
         onPressed: () async {
           // Navigate to create trip screen
@@ -67,7 +68,10 @@ class _TripListScreenState extends State<TripListScreen> {
         },
         child: const Icon(Icons.add),
       ),
+      // Add this somewhere you can tap it
+
     );
+    
   }
 
   Widget _buildEmptyState() {
@@ -112,7 +116,7 @@ class _TripListScreenState extends State<TripListScreen> {
     final startStr = dateFormat.format(trip.startDate);
     final endStr = trip.endDate != null 
         ? dateFormat.format(trip.endDate!)
-        : 'Current';
+        : 'Current'; // ID edit
     
     // Show date range only if spans multiple months
     final dateDisplay = _spansMultipleMonths(trip.startDate, trip.endDate)

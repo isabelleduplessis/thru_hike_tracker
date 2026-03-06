@@ -74,9 +74,11 @@ class NewsletterGenerator {
       }
       buffer.writeln();
       
-      // Location
-      if (entry.location != null && entry.location!.isNotEmpty) {
-        buffer.writeln('Location: ${entry.location}');
+      // coordinates
+      if (entry.latitude != null && entry.longitude != null) {
+        buffer.writeln(
+          'Location: https://maps.google.com/?q=${entry.latitude},${entry.longitude}'
+        );
       }
       
       // Direction

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/gear.dart';
 import '../repositories/gear_repository.dart';
 import 'gear_form_screen.dart';
+import '../services/settings_service.dart';
 
 class GearListScreen extends StatefulWidget {
   const GearListScreen({Key? key}) : super(key: key);
@@ -15,6 +16,7 @@ class _GearListScreenState extends State<GearListScreen> {
   final GearRepository _gearRepository = GearRepository();
   List<Gear> _gear = [];
   bool _isLoading = true;
+  final _settings = SettingsService();
 
   @override
   void initState() {
@@ -132,7 +134,7 @@ class _GearListScreenState extends State<GearListScreen> {
                 if (snapshot.hasData) ...[
                   const SizedBox(height: 4),
                   Text(
-                    '${snapshot.data!.totalMiles.toStringAsFixed(1)} miles • ${snapshot.data!.daysUsed} days',
+                    '${_settings.formatDistance(snapshot.data!.totalMiles)} • ${snapshot.data!.daysUsed} days',
                     style: const TextStyle(
                       color: Colors.green,
                       fontWeight: FontWeight.w600,

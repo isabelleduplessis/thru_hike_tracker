@@ -1,3 +1,4 @@
+// trip_detail_screen.dart
 // Shows all entries for a specific trip
 
 import 'package:flutter/material.dart';
@@ -12,11 +13,14 @@ import '../models/custom_field.dart';
 import '../repositories/custom_field_repository.dart';
 import '../utils/newsletter_generator.dart';
 import 'package:table_calendar/table_calendar.dart';
+import '../services/settings_service.dart';
+import '../repositories/trip_repository.dart';
+import '../utils/section_colors.dart';
 
 
 class TripDetailScreen extends StatefulWidget {
-  final Trip trip; // why do we have this here but not in gear screen? - because we need to know which trip's entries to show, whereas the gear screen just shows all gear regardless of trip
-  
+  final Trip trip; // why do we have this here but not in gear screen? - because we need to know which trip's entries to show, whereas the gear screen just shows all gear regardless of tri
+
   const TripDetailScreen({Key? key, required this.trip}) : super(key: key);
 
   @override
@@ -25,6 +29,7 @@ class TripDetailScreen extends StatefulWidget {
 
 class _TripDetailScreenState extends State<TripDetailScreen> {
   final EntryRepository _entryRepository = EntryRepository();
+  final _settings = SettingsService();
   List<Entry> _entries = [];
   bool _isLoading = true;
   final CustomFieldRepository _customFieldRepository = CustomFieldRepository();
@@ -34,11 +39,34 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   Map<DateTime, List<Entry>> _entriesByDate = {};
+  Map<int, int> _entryDayNumbers = {};
+
+  // Inside _TripDetailScreenState
+  late Trip _currentTrip; // Use this instead of widget.trip everywhere in build
+  final TripRepository _tripRepository = TripRepository(); // Need this to fetch fresh data
 
   @override
   void initState() {
     super.initState();
+    _currentTrip = widget.trip; // Initialize with the passed trip
     _loadEntries();
+  }
+
+  String _getSectionForEntry(double mile) {
+    for (var section in _currentTrip.sections) {
+      if (mile >= section.startMile && mile <= section.endMile) {
+        return section.name;
+      }
+    }
+    return "";
+  }
+
+  int _getSectionIndexForEntry(double mile) {
+    for (int i = 0; i < _currentTrip.sections.length; i++) {
+      final section = _currentTrip.sections[i];
+      if (mile >= section.startMile && mile <= section.endMile) return i;
+    }
+    return -1;
   }
 
   Future<void> _loadEntries() async {
@@ -46,12 +74,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       _isLoading = true;
     });
     
-    final entries = await _entryRepository.getEntriesForTrip(widget.trip.id!);
+    // 1. Fetch the latest Trip data (including new sections/direction)
+    final updatedTrip = await _tripRepository.getTripById(_currentTrip.id!);
+    
+    // 2. Fetch the entries
+    final entries = await _entryRepository.getEntriesForTrip(_currentTrip.id!);
     
     setState(() {
+      if (updatedTrip != null) {
+        _currentTrip = updatedTrip;
+      }
       _entries = entries;
       _isLoading = false;
-      _groupEntriesByDate();  // ← Add this line
+      _groupEntriesByDate();
+      _entryDayNumbers = _calculateDayNumbers();
     });
   }
   void _groupEntriesByDate() {
@@ -64,13 +100,27 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       _entriesByDate[dateKey]!.add(entry);
     }
   }
+  Map<int, int> _calculateDayNumbers() {
+    // Sort entries by date (oldest first)
+    final sortedEntries = List<Entry>.from(_entries)
+      ..sort((a, b) => a.date.compareTo(b.date));
+    
+    // Assign day numbers
+    final dayNumbers = <int, int>{};
+    for (int i = 0; i < sortedEntries.length; i++) {
+      dayNumbers[sortedEntries[i].id!] = i + 1;
+    }
+    
+    return dayNumbers;
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        // CHANGE 1: Use _currentTrip.name so it updates after an edit
         title: Text(_isSelectionMode 
             ? '${_selectedEntryIds.length} selected'
-            : widget.trip.name),
+            : _currentTrip.name), 
         leading: _isSelectionMode
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -94,9 +144,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 child: const Text('Select All'),
               ),
             IconButton(
-              icon: const Icon(Icons.email),
+              icon: const Icon(Icons.email_outlined),
               onPressed: _selectedEntryIds.isEmpty ? null : _exportToEmail,
-              tooltip: 'Export to Email',
             ),
           ] else
             IconButton(
@@ -105,20 +154,21 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 final result = await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => TripFormScreen(trip: widget.trip),
+                    // CHANGE 2: Pass _currentTrip to the form, not widget.trip
+                    builder: (context) => TripFormScreen(trip: _currentTrip),
                   ),
                 );
                 
                 if (result == true) {
-                  _loadEntries();
-                  setState(() {});
+                  // This triggers _loadEntries which now fetches the 
+                  // fresh trip + fresh sections from the DB
+                  _loadEntries(); 
                 } else if (result == 'deleted') {
                   if (mounted) {
                     Navigator.pop(context, true);
                   }
                 }
               },
-              tooltip: 'Edit Trip',
             ),
         ],
       ),
@@ -126,7 +176,6 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         ? const Center(child: CircularProgressIndicator())
         : Column(
             children: [
-              // View toggle
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Row(
@@ -146,6 +195,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                         ),
                       ],
                       selected: {_isCalendarView},
+                      showSelectedIcon: false,
                       onSelectionChanged: (Set<bool> selected) {
                         setState(() {
                           _isCalendarView = selected.first;
@@ -155,14 +205,49 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ],
                 ),
               ),
-              
-              // Content
               Expanded(
                 child: _isCalendarView
                     ? _buildCalendarView()
                     : (_entries.isEmpty
                         ? _buildEmptyState()
                         : _buildEntryList()),
+              ),
+            ],
+          ),
+      floatingActionButton: _isSelectionMode
+        ? null
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_entries.isNotEmpty)
+                FloatingActionButton(
+                  heroTag: 'select',
+                  onPressed: () {
+                    setState(() {
+                      _isSelectionMode = true;
+                    });
+                  },
+                  child: const Icon(Icons.checklist),
+                ),
+              const SizedBox(height: 12),
+              FloatingActionButton(
+                heroTag: 'add',
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EntryFormScreen(
+                        // CHANGE 3: Use _currentTrip here too
+                        trip: _currentTrip, 
+                      ),
+                    ),
+                  );
+                  
+                  if (result == true) {
+                    _loadEntries();
+                  }
+                },
+                child: const Icon(Icons.add),
               ),
             ],
           ),
@@ -206,61 +291,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   Widget _buildEntryCard(Entry entry) {
     final dateFormat = DateFormat('EEE, MMM d, yyyy');
     final isSelected = _selectedEntryIds.contains(entry.id);
-    
+    final sectionName = _getSectionForEntry(entry.endMile);
+    final sectionIndex = _getSectionIndexForEntry(entry.endMile);
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: _isSelectionMode
-            ? Checkbox(
-                value: isSelected,
-                onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _selectedEntryIds.add(entry.id!);
-                    } else {
-                      _selectedEntryIds.remove(entry.id!);
-                    }
-                  });
-                },
-              )
-            : null,
-        title: Text(
-          dateFormat.format(entry.date),
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            Text(
-              '${entry.totalDistance.toStringAsFixed(1)} miles',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.green,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Mile ${entry.startMile.toStringAsFixed(1)} → ${entry.endMile.toStringAsFixed(1)}',
-            ),
-            if (entry.location != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(Icons.location_on, size: 16),
-                  const SizedBox(width: 4),
-                  Text(entry.location!),
-                ],
-              ),
-            ],
-          ],
-        ),
-        trailing: _isSelectionMode ? null : const Icon(Icons.chevron_right),
+      clipBehavior: Clip.antiAlias, // Ensures the InkWell splash stays inside the card corners
+      child: InkWell( // Wrap the entire content to fix the hover/highlight issue
         onTap: _isSelectionMode
             ? () {
                 setState(() {
@@ -276,16 +313,90 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) => EntryFormScreen(
-                      trip: widget.trip,
+                      trip: _currentTrip,
                       entry: entry,
                     ),
                   ),
                 );
-                
-                if (result == true) {
+                if (result == true || result == 'deleted') {
                   _loadEntries();
                 }
               },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              // Reduces the gap between the text and the bottom badge
+              visualDensity: const VisualDensity(vertical: -4, horizontal: 0),
+              contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0), // Bottom padding set to 0
+              leading: _isSelectionMode
+                  ? Checkbox(
+                      value: isSelected,
+                      onChanged: (value) {
+                        // Trigger the same logic as the card tap
+                        if (value != null) {
+                          setState(() => value ? _selectedEntryIds.add(entry.id!) : _selectedEntryIds.remove(entry.id!));
+                        }
+                      },
+                    )
+                  : null,
+              title: Text(
+                'Day ${_entryDayNumbers[entry.id] ?? '?'} - ${dateFormat.format(entry.date)}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  Text(
+                    _settings.formatDistance(entry.totalDistance),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.cyan.shade700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_settings.getDistanceUnitLabel() == "km" ? "KM" : "Mile"} '
+                    '${_settings.convertToDisplayUnit(entry.startMile).toStringAsFixed(1)} → '
+                    '${_settings.convertToDisplayUnit(entry.endMile).toStringAsFixed(1)}',
+                  ),
+                  if (entry.location != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on, size: 16),
+                        const SizedBox(width: 4),
+                        Text(entry.location!),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+              trailing: _isSelectionMode ? null : const Icon(Icons.chevron_right),
+            ),
+            
+            // --- THE SECTION HEADER BADGE ---
+            if (sectionName.isNotEmpty)
+              Padding(
+                // Reduced top padding to move it closer to the text above
+                padding: const EdgeInsets.only(left: 16, top: 4, bottom: 12), 
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: sectionIndex >= 0 ? sectionColor(_currentTrip.id!, sectionIndex) : Theme.of(context).colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    sectionName.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: sectionIndex >= 0 ? Colors.white : Theme.of(context).colorScheme.onSecondaryContainer,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -504,3 +615,4 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     );
   }
 }
+

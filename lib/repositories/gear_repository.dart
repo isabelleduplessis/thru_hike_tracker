@@ -213,4 +213,38 @@ class GearRepository {
           : null,
     );
   }
+
+  // Get gear that was active on a specific date
+  Future<List<Gear>> getActiveGearOnDate(DateTime date) async {
+    final db = await _dbHelper.database;
+    
+    final dateStr = date.toIso8601String().split('T')[0];
+    
+    final maps = await db.rawQuery('''
+      SELECT * FROM gear
+      WHERE DATE(start_date) <= DATE(?)
+      AND (end_date IS NULL OR DATE(end_date) >= DATE(?))
+      ORDER BY name ASC
+    ''', [dateStr, dateStr]);
+    
+    return maps.map((map) => Gear.fromMap(map)).toList();
+  }
+
+  // Get the last date this gear was used in an entry
+  Future<DateTime?> getLastUsedDate(int gearId) async {
+    final db = await _dbHelper.database;
+    
+    final result = await db.rawQuery('''
+      SELECT MAX(e.date) as last_date
+      FROM entries e
+      INNER JOIN entry_gear eg ON e.id = eg.entry_id
+      WHERE eg.gear_id = ?
+    ''', [gearId]);
+    
+    if (result.isEmpty || result.first['last_date'] == null) {
+      return null;
+    }
+    
+    return DateTime.parse(result.first['last_date'] as String);
+  }
 }

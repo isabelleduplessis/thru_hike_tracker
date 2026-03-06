@@ -1,13 +1,23 @@
-// models/trip.dart
-// Represents a hiking trip or trail (e.g., "PCT 2026", "Weekend Backpack")
+// lib/models/trip.dart
+import 'direction.dart';
+import 'section.dart';
 
 class Trip {
-  final int? id; // Nullable because new trips don't have an ID yet
+  final int? id;
   final String name;
   final DateTime startDate;
   final double startMile;
   final TripStatus status;
-  final DateTime? endDate; // Nullable - trip might still be active
+  final DateTime? endDate;
+  final double tripLength;
+  final double endMile;
+  final Direction? direction;
+  final List<Section> sections;
+  final bool trackCoordinates;
+  final bool trackShower;
+  final bool trackElevation;
+  final bool trackSleeping;
+  final double? neroThreshold;
   
   Trip({
     this.id,
@@ -16,37 +26,61 @@ class Trip {
     this.startMile = 0.0,
     this.status = TripStatus.active,
     this.endDate,
-  });
+    this.tripLength = 0.0,
+    double? endMile,
+    this.direction,
+    this.sections = const [],
+    this.trackCoordinates = false,
+    this.trackShower = false,
+    this.trackElevation = false,
+    this.trackSleeping = false,
+    this.neroThreshold,
+  }) : endMile = endMile ?? (startMile + tripLength);
   
-  // Convert Trip object to Map (for storing in SQLite)
-  // SQLite stores data as key-value maps
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
-      'start_date': startDate.toIso8601String(), // Convert DateTime to string
+      'start_date': startDate.toIso8601String(),
       'start_mile': startMile,
-      'status': status.index, // Store enum as integer (0, 1, 2)
-      'end_date': endDate?.toIso8601String(), // ? means "if not null"
+      'status': status.index,
+      'end_date': endDate?.toIso8601String(),
+      'trip_length': tripLength,
+      'end_mile': endMile,
+      'direction': direction?.index,
+      'track_coordinates': trackCoordinates ? 1 : 0,
+      'track_shower': trackShower ? 1 : 0,
+      'track_elevation': trackElevation ? 1 : 0,
+      'track_sleeping': trackSleeping ? 1 : 0,
+      'nero_threshold': neroThreshold,
+      // Sections are stored in a separate table, so we don't include them in the Trip map
     };
   }
   
-  // Create Trip object from Map (when reading from SQLite)
-  factory Trip.fromMap(Map<String, dynamic> map) {
+  factory Trip.fromMap(Map<String, dynamic> map, {List<Section> sections = const []}) {
     return Trip(
       id: map['id'] as int?,
       name: map['name'] as String,
       startDate: DateTime.parse(map['start_date'] as String),
-      startMile: map['start_mile'] as double,
+      startMile: (map['start_mile'] as num).toDouble(),
       status: TripStatus.values[map['status'] as int],
       endDate: map['end_date'] != null 
           ? DateTime.parse(map['end_date'] as String)
           : null,
+      tripLength: (map['trip_length'] as num?)?.toDouble() ?? 0.0,
+      endMile: (map['end_mile'] as num?)?.toDouble() ?? 0.0,
+      direction: map['direction'] != null 
+        ? Direction.values[map['direction'] as int]
+        : null,
+      sections: sections, // Now properly assigned from the repository fetch
+      trackCoordinates: (map['track_coordinates'] as int? ?? 0) == 1,
+      trackShower: (map['track_shower'] as int? ?? 0) == 1,
+      trackElevation: (map['track_elevation'] as int? ?? 0) == 1,
+      trackSleeping: (map['track_sleeping'] as int? ?? 0) == 1,
+      neroThreshold: map['nero_threshold'] as double?,
     );
   }
   
-  // Create a copy of this Trip with some fields changed
-  // Useful for updating trips without mutating the original
   Trip copyWith({
     int? id,
     String? name,
@@ -54,6 +88,15 @@ class Trip {
     double? startMile,
     TripStatus? status,
     DateTime? endDate,
+    double? tripLength,
+    double? endMile,
+    Direction? direction,
+    List<Section>? sections,
+    bool? trackCoordinates,
+    bool? trackShower,
+    bool? trackElevation,
+    bool? trackSleeping,
+    double? neroThreshold,
   }) {
     return Trip(
       id: id ?? this.id,
@@ -62,14 +105,17 @@ class Trip {
       startMile: startMile ?? this.startMile,
       status: status ?? this.status,
       endDate: endDate ?? this.endDate,
+      tripLength: tripLength ?? this.tripLength,
+      endMile: endMile ?? this.endMile,
+      direction: direction ?? this.direction,
+      sections: sections ?? this.sections,
+      trackCoordinates: trackCoordinates ?? this.trackCoordinates,
+      trackShower: trackShower ?? this.trackShower,
+      trackElevation: trackElevation ?? this.trackElevation,
+      trackSleeping: trackSleeping ?? this.trackSleeping,
+      neroThreshold: neroThreshold ?? this.neroThreshold,
     );
   }
 }
 
-// Enum for trip status
-// Enums are type-safe constants - can only be these values
-enum TripStatus {
-  active, 
-  paused, 
-  completed,
-}
+enum TripStatus { active, paused, completed }

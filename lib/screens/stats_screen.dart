@@ -7,6 +7,10 @@ import '../models/entry.dart';
 import '../repositories/trip_repository.dart';
 import '../repositories/entry_repository.dart';
 import '../repositories/custom_field_repository.dart';
+import '../services/settings_service.dart';
+import '../models/section.dart';
+import '../utils/section_colors.dart';
+
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({Key? key}) : super(key: key);
@@ -19,6 +23,7 @@ class _StatsScreenState extends State<StatsScreen> {
   final TripRepository _tripRepository = TripRepository();
   final EntryRepository _entryRepository = EntryRepository();
   final CustomFieldRepository _customFieldRepository = CustomFieldRepository();
+  final _settings = SettingsService();
 
   bool _isLoading = true;
   Trip? _selectedTrip;
@@ -27,11 +32,57 @@ class _StatsScreenState extends State<StatsScreen> {
   double _averageMiles = 0;
   List<Entry> _chartEntries = [];
   List<CustomFieldStat> _customFieldStats = [];
+  bool _includeZeroDays = true;
+  bool _includeExtraSkippedMiles = true;
+  double _longestDay = 0;
+  int _bestStreak = 0;
+  Trip? _longestTrip;
+  int _totalTrips = 0;
+  List<Trip> _allTrips = [];
+  List<double> _allTripMiles = [];
+  double _longestTripMiles = 0;
+  int _neroDays = 0;
+  double _totalElevationGain = 0;
+  double _totalElevationLoss = 0;
+
+  double _entryDistance(Entry e) =>
+      _includeExtraSkippedMiles ? e.totalDistance : e.netDistance;
+
+  List<Entry> get _filteredChartEntries {
+    if (_includeZeroDays) return _chartEntries;
+    return _chartEntries.where((e) => _entryDistance(e) > 0).toList();
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadStatsForAllTrips();
+    _loadDefaultTrip();
+  }
+
+  Future<void> _loadDefaultTrip() async {
+    final mostRecent = await _tripRepository.getMostRecentTrip();
+    if (mostRecent != null) {
+      _loadStatsForTrip(mostRecent);
+    } else {
+      _loadStatsForAllTrips();
+    }
+  }
+
+  double _calculateMilesInSection(Section section) {
+    return _chartEntries.where((e) {
+      return e.endMile > section.startMile && e.endMile <= section.endMile;
+    }).fold(0.0, (sum, e) => sum + e.totalDistance);
+  }
+
+  Future<void> _recalculateCustomFieldStats() async {
+    if (_selectedTrip == null) return;
+    final filteredEntryIds = _filteredChartEntries
+        .where((e) => e.id != null)
+        .map((e) => e.id!)
+        .toList();
+    final customStats = await _customFieldRepository
+        .getCustomFieldStatsForEntries(_selectedTrip!.id!, filteredEntryIds);
+    if (mounted) setState(() => _customFieldStats = customStats);
   }
 
   Future<void> _loadStatsForAllTrips() async {
@@ -41,16 +92,70 @@ class _StatsScreenState extends State<StatsScreen> {
     final totalDays = await _entryRepository.getEntryCountForAllTrips();
     final averageMiles = totalDays > 0 ? totalMiles / totalDays : 0.0;
     final customStats = await _customFieldRepository.getCustomFieldStatsLifetime();
+    final longestDay = await _entryRepository.getLongestDayAllTrips();
+    final bestStreak = await _entryRepository.getBestStreakAllTrips();
+    final longestTrip = await _tripRepository.getLongestTrip();
+    final allTrips = await _tripRepository.getAllTrips();
+    final allTripMiles = await Future.wait(
+      allTrips.map((t) => _entryRepository.getTotalMilesForTrip(t.id!))
+    );
+    final longestTripMiles = longestTrip != null
+      ? await _entryRepository.getTotalMilesForTrip(longestTrip.id!)
+      : 0.0;
+    final elevationGain = await _entryRepository.getTotalElevationGainAllTrips();
+    final elevationLoss = await _entryRepository.getTotalElevationLossAllTrips();
 
     setState(() {
       _selectedTrip = null;
       _totalMiles = totalMiles;
       _totalDays = totalDays;
       _averageMiles = averageMiles;
-      _chartEntries = [];  // No chart for all trips
+      _chartEntries = [];
       _customFieldStats = customStats;
+      _longestDay = longestDay;
+      _bestStreak = bestStreak;
+      _longestTrip = longestTrip;
+      _totalTrips = allTrips.length;
       _isLoading = false;
+      _allTrips = allTrips;
+      _allTripMiles = allTripMiles;
+      _longestTripMiles = longestTripMiles;
+      _totalElevationGain = elevationGain;
+      _totalElevationLoss = elevationLoss;
+      _neroDays = 0;
     });
+  }
+
+  void _recalculateStats() {
+    final entries = _filteredChartEntries;
+
+    if (entries.isEmpty) {
+      setState(() {
+        _totalMiles = 0;
+        _totalDays = 0;
+        _averageMiles = 0;
+      });
+      _recalculateCustomFieldStats();
+      return;
+    }
+
+    final Map<String, double> dailyMiles = {};
+    for (final e in entries) {
+      final day = e.date.toIso8601String().substring(0, 10);
+      dailyMiles[day] = (dailyMiles[day] ?? 0) + _entryDistance(e);
+    }
+
+    final totalMiles = dailyMiles.values.fold(0.0, (sum, v) => sum + v);
+    final totalDays = dailyMiles.length;
+    final averageMiles = totalMiles / totalDays;
+
+    setState(() {
+      _totalMiles = totalMiles;
+      _totalDays = totalDays;
+      _averageMiles = averageMiles;
+    });
+
+    _recalculateCustomFieldStats();
   }
 
   Future<void> _loadStatsForTrip(Trip trip) async {
@@ -60,7 +165,17 @@ class _StatsScreenState extends State<StatsScreen> {
     final totalDays = await _entryRepository.getEntryCountForTrip(trip.id!);
     final averageMiles = totalDays > 0 ? totalMiles / totalDays : 0.0;
     final chartEntries = await _entryRepository.getEntriesForTripChronological(trip.id!);
-    final customStats = await _customFieldRepository.getCustomFieldStatsForTrip(trip.id!);
+    final longestDay = await _entryRepository.getLongestDayForTrip(trip.id!);
+    final bestStreak = await _entryRepository.getBestStreakForTrip(trip.id!);
+    final neroDays = trip.neroThreshold != null
+        ? await _entryRepository.getNeroDaysForTrip(trip.id!, trip.neroThreshold!)
+        : 0;
+    final elevationGain = trip.trackElevation
+        ? await _entryRepository.getTotalElevationGainForTrip(trip.id!)
+        : 0.0;
+    final elevationLoss = trip.trackElevation
+        ? await _entryRepository.getTotalElevationLossForTrip(trip.id!)
+        : 0.0;
 
     setState(() {
       _selectedTrip = trip;
@@ -68,17 +183,21 @@ class _StatsScreenState extends State<StatsScreen> {
       _totalDays = totalDays;
       _averageMiles = averageMiles;
       _chartEntries = chartEntries;
-      _customFieldStats = customStats;
+      _longestDay = longestDay;
+      _bestStreak = bestStreak;
+      _neroDays = neroDays;
+      _totalElevationGain = elevationGain;
+      _totalElevationLoss = elevationLoss;
       _isLoading = false;
     });
+
+    _recalculateStats();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Stats'),
-      ),
+      appBar: AppBar(title: const Text('Stats')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -86,29 +205,26 @@ class _StatsScreenState extends State<StatsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Trip Selector
                   _buildTripSelector(),
                   const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 16),
-                  
-                  if (_totalDays == 0)
-                    _buildEmptyState()
-                  else ...[
-                    // Main Stats Cards
-                    _buildMainStats(),
+                  _buildStatsHeader(),
+                  const SizedBox(height: 8),
+                  _buildMainStats(),
+                  const SizedBox(height: 24),
+                  if (_selectedTrip == null && _allTrips.length > 1) ...[
                     const SizedBox(height: 24),
-                    
-                    // Miles Per Day Chart (only for specific trip)
-                    if (_selectedTrip != null && _chartEntries.length > 1) ...[
-                      _buildChartSection(),
-                      const SizedBox(height: 24),
-                    ],
-                    
-                    // Custom Field Stats
-                    if (_customFieldStats.isNotEmpty) ...[
-                      _buildCustomFieldStats(),
-                    ],
+                    _buildDonutChart(_allTrips, _allTripMiles),
+                  ],
+                  if (_selectedTrip != null && _chartEntries.length > 1) ...[
+                    _buildChartSection(),
+                    const SizedBox(height: 24),
+                  ],
+                  if (_selectedTrip != null && _selectedTrip!.tripLength > 0) ...[
+                    const Text('Progress', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    _buildOverallProgress(),
+                    _buildSectionBreakdown(),
+                    const SizedBox(height: 24),
                   ],
                 ],
               ),
@@ -137,6 +253,46 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  Widget _buildStatsHeader() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          if (_selectedTrip != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text('Include zero days', style: TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 4),
+                Switch(
+                  value: _includeZeroDays,
+                  onChanged: (value) {
+                    setState(() => _includeZeroDays = value);
+                    _recalculateStats();
+                  },
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text('Include +/- distance', style: TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 4),
+                Switch(
+                  value: _includeExtraSkippedMiles,
+                  onChanged: (value) {
+                    setState(() => _includeExtraSkippedMiles = value);
+                    _recalculateStats();
+                  },
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMainStats() {
     return Column(
       children: [
@@ -144,13 +300,13 @@ class _StatsScreenState extends State<StatsScreen> {
           children: [
             Expanded(
               child: _buildStatCard(
-                'Total Miles',
-                _totalMiles.toStringAsFixed(1),
+                'Total Distance',
+                _settings.formatDistance(_totalMiles),
                 Icons.terrain,
                 Colors.green,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: _buildStatCard(
                 'Total Days',
@@ -161,44 +317,296 @@ class _StatsScreenState extends State<StatsScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        _buildStatCard(
-          'Average Miles/Day',
-          _averageMiles.toStringAsFixed(1),
-          Icons.trending_up,
-          Colors.orange,
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'Avg Per Day',
+                _settings.formatDistance(_averageMiles),
+                Icons.trending_up,
+                Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 10),
+            if (_selectedTrip != null && _includeZeroDays)
+              Expanded(
+                child: _buildStatCard(
+                  'Zero Days',
+                  _zeroDays().toString(),
+                  Icons.bedtime,
+                  Colors.blueGrey,
+                ),
+              )
+            else
+              const Expanded(child: SizedBox.shrink()),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'Longest Day',
+                _settings.formatDistance(_longestDay),
+                Icons.emoji_events,
+                Colors.purple,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildStatCard(
+                'Best Streak',
+                '$_bestStreak days',
+                Icons.local_fire_department,
+                Colors.deepOrange,
+              ),
+            ),
+          ],
+        ),
+        if (_selectedTrip != null && _selectedTrip!.neroThreshold != null) ...[
+          const SizedBox(height: 10),
+          _buildStatCard(
+            'Nero Days',
+            _neroDays.toString(),
+            Icons.directions_walk,
+            Colors.amber,
+          ),
+        ],
+        if (_totalElevationGain > 0 || _totalElevationLoss > 0) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  'Total Gain',
+                  _settings.formatElevation(_totalElevationGain),
+                  Icons.trending_up,
+                  Colors.green,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStatCard(
+                  'Total Loss',
+                  _settings.formatElevation(_totalElevationLoss),
+                  Icons.trending_down,
+                  Colors.red,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (_customFieldStats.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _customFieldStats.map((stat) {
+              return SizedBox(
+                width: (MediaQuery.of(context).size.width - 44) / 2,
+                child: _buildStatCard(
+                  stat.field.name,
+                  '${stat.displayValue} ${stat.label}',
+                  Icons.tune,
+                  Colors.cyan,
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+        if (_selectedTrip == null) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  'Total Trips',
+                  _totalTrips.toString(),
+                  Icons.map,
+                  Colors.teal,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStatCard(
+                  'Longest Trip',
+                  _longestTrip != null
+                      ? '${_longestTrip!.name}\n${_settings.formatDistance(_longestTripMiles)}'
+                      : '-',
+                  Icons.hiking,
+                  Colors.indigo,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildTopFilters() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            const Text('Include zero days', style: TextStyle(fontSize: 13)),
+            Switch(
+              value: _includeZeroDays,
+              onChanged: (value) {
+                setState(() => _includeZeroDays = value);
+                _recalculateStats();
+              },
+            ),
+          ],
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            const Text('Include extra/skipped', style: TextStyle(fontSize: 13)),
+            Switch(
+              value: _includeExtraSkippedMiles,
+              onChanged: (value) {
+                setState(() => _includeExtraSkippedMiles = value);
+                _recalculateStats();
+              },
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  Widget _buildOverallProgress() {
+    if (_selectedTrip == null) return const SizedBox.shrink();
+    final stats = _calculateAdjustedProgress(0, _selectedTrip!.tripLength);
+    return _buildBaseProgressBar(
+      stats.percentage,
+      stats.coveredWithExtra,
+      stats.adjustedTotal,
+      "Overall Progress",
+    );
+  }
+
+  Widget _buildBaseProgressBar(double progress, double completed, double total, String label, {Color? color}) {
+    final barColor = color ?? Theme.of(context).colorScheme.primary;
+    final remaining = (total - completed).clamp(0.0, double.infinity);
+    final percentText = '${(progress * 100).toStringAsFixed(1)}%';
+    final isOverall = label == "Overall Progress";
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: isOverall ? 13 : 12,
+                fontWeight: isOverall ? FontWeight.bold : FontWeight.normal,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final barWidth = constraints.maxWidth;
+                    final fillWidth = (progress * barWidth).clamp(0.0, barWidth);
+                    final showTextInside = fillWidth > 50;
+
+                    return Stack(
+                      alignment: Alignment.centerLeft,
+                      children: [
+                        Container(
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        Container(
+                          height: 18,
+                          width: fillWidth,
+                          decoration: BoxDecoration(
+                            color: barColor,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        Positioned(
+                          left: showTextInside ? (fillWidth - 48) : (fillWidth + 6),
+                          child: Text(
+                            percentText,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: showTextInside ? Colors.white : barColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${_settings.formatDistance(completed)} / ${_settings.formatDistance(total)}  •  ${_settings.formatDistance(remaining)} remaining',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 36, color: color),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -211,79 +619,112 @@ class _StatsScreenState extends State<StatsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Miles Per Day',
+          'Daily Distance',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 220,
-          child: _buildLineChart(),
-        ),
+        const SizedBox(height: 16),
+        if (_filteredChartEntries.length > 1)
+          SizedBox(
+            height: 260,
+            child: _buildLineChart(),
+          )
+        else
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Text('Not enough entries to show chart', style: TextStyle(color: Colors.grey)),
+            ),
+          ),
       ],
     );
   }
 
   Widget _buildLineChart() {
-    // Build chart data points
-    final spots = _chartEntries.asMap().entries.map((e) {
+    final entries = _filteredChartEntries;
+
+    final Map<String, double> dailyMiles = {};
+    for (final e in entries) {
+      final day = e.date.toIso8601String().substring(0, 10);
+      dailyMiles[day] = (dailyMiles[day] ?? 0) + _entryDistance(e);
+    }
+    final sortedDays = dailyMiles.keys.toList()..sort();
+
+    final spots = sortedDays.asMap().entries.map((e) {
       return FlSpot(
-        e.key.toDouble(),
-        e.value.totalDistance,
+        (e.key + 1).toDouble(),
+        _settings.convertToDisplayUnit(dailyMiles[e.value]!),
       );
     }).toList();
 
-    // Build x-axis labels (show fewer when many entries)
-    final dateFormat = DateFormat('M/d');
-    final interval = (_chartEntries.length / 5).ceil().toDouble();
+    final maxDay = sortedDays.length.toDouble();
+    final maxMiles = dailyMiles.isEmpty
+        ? 25.0
+        : dailyMiles.values.reduce((a, b) => a > b ? a : b);
+    final maxInDisplayUnit = _settings.convertToDisplayUnit(maxMiles);
+    final yMax = ((maxInDisplayUnit / 5).ceil() * 5).toDouble();
+
+    final xInterval = maxDay <= 10 ? 1.0 : (maxDay / 10).ceilToDouble();
+    final yInterval = yMax <= 25 ? 5.0 : (yMax / 5).ceilToDouble();
 
     return LineChart(
       LineChartData(
-        // Grid lines
+        minX: 1,
+        maxX: maxDay > 0 ? maxDay : 10,
+        minY: 0,
+        maxY: yMax > 0 ? yMax : 25,
         gridData: FlGridData(
           show: true,
-          drawVerticalLine: false,
-          horizontalInterval: 5,
+          drawVerticalLine: true,
+          horizontalInterval: yInterval,
+          verticalInterval: xInterval,
           getDrawingHorizontalLine: (value) => FlLine(
             color: Colors.grey.withOpacity(0.2),
             strokeWidth: 1,
           ),
+          getDrawingVerticalLine: (value) => FlLine(
+            color: Colors.grey.withOpacity(0.2),
+            strokeWidth: 1,
+          ),
         ),
-        
-        // Border
         borderData: FlBorderData(
           show: true,
           border: Border(
-            bottom: BorderSide(color: Colors.grey.withOpacity(0.4)),
-            left: BorderSide(color: Colors.grey.withOpacity(0.4)),
+            bottom: BorderSide(color: Colors.grey.withOpacity(0.4), width: 1),
+            left: BorderSide(color: Colors.grey.withOpacity(0.4), width: 1),
           ),
         ),
-        
-        // X axis
         titlesData: FlTitlesData(
           bottomTitles: AxisTitles(
+            axisNameWidget: const Padding(
+              padding: EdgeInsets.only(top: 0),
+              child: Text('Day', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
             sideTitles: SideTitles(
               showTitles: true,
-              interval: interval,
+              interval: xInterval,
+              reservedSize: 30,
               getTitlesWidget: (value, meta) {
-                final index = value.toInt();
-                if (index >= 0 && index < _chartEntries.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      dateFormat.format(_chartEntries[index].date),
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
+                if (value % 1 != 0) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 0),
+                  child: Text(
+                    value.toInt().toString(),
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                );
               },
             ),
           ),
           leftTitles: AxisTitles(
+            axisNameWidget: Padding(
+              padding: const EdgeInsets.only(bottom: 0),
+              child: Text(_settings.getDistanceUnitLabel(),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 5,
-              reservedSize: 30,
+              interval: yInterval,
+              reservedSize: 35,
               getTitlesWidget: (value, meta) {
                 return Text(
                   value.toInt().toString(),
@@ -292,23 +733,15 @@ class _StatsScreenState extends State<StatsScreen> {
               },
             ),
           ),
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        
-        // The actual line
         lineBarsData: [
           LineChartBarData(
             spots: spots,
             isCurved: false,
             color: Colors.green,
             barWidth: 2.5,
-            
-            // Dots on each data point
             dotData: FlDotData(
               show: true,
               getDotPainter: (spot, percent, bar, index) {
@@ -320,96 +753,32 @@ class _StatsScreenState extends State<StatsScreen> {
                 );
               },
             ),
-            
-            // Area fill under the curve
             belowBarData: BarAreaData(
               show: true,
               color: Colors.green.withOpacity(0.15),
             ),
           ),
         ],
-        
-        // Touch tooltip
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
-                final entry = _chartEntries[spot.x.toInt()];
-                return LineTooltipItem(
-                  '${entry.totalDistance.toStringAsFixed(1)} mi\n${dateFormat.format(entry.date)}',
-                  const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
-                );
+                final index = spot.x.toInt() - 1;
+                if (index >= 0 && index < sortedDays.length) {
+                  final date = DateTime.parse(sortedDays[index]);
+                  final miles = dailyMiles[sortedDays[index]]!;
+                  final dateFormat = DateFormat('M/d');
+                  return LineTooltipItem(
+                    'Day ${spot.x.toInt()}\n${_settings.formatDistance(miles)}\n${dateFormat.format(date)}',
+                    const TextStyle(color: Colors.white, fontSize: 12),
+                  );
+                }
+                return null;
               }).toList();
             },
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildCustomFieldStats() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Custom Stats',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        Wrap(                    // ← Replace GridView.builder with this
-          spacing: 12,
-          runSpacing: 12,
-          children: _customFieldStats.map((stat) {
-            return SizedBox(
-              width: (MediaQuery.of(context).size.width - 44) / 2,
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        stat.field.name,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            stat.displayValue,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            stat.label,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
     );
   }
 
@@ -456,4 +825,174 @@ class _StatsScreenState extends State<StatsScreen> {
       },
     );
   }
+
+  Widget _buildDonutChart(List<Trip> trips, List<double> miles) {
+    final total = miles.fold(0.0, (a, b) => a + b);
+    if (total == 0) return const SizedBox.shrink();
+
+    const colors = [
+      Color(0xFF04E762), Color(0xFFF5B700), Color(0xFF00A1E4),
+      Color(0xFFDC0073), Color(0xFF00D7BB),
+    ];
+
+    final sections = trips.asMap().entries.map((e) {
+      final pct = miles[e.key] / total;
+      return PieChartSectionData(
+        value: miles[e.key],
+        color: colors[e.key % colors.length],
+        title: pct > 0.08 ? '${(pct * 100).toStringAsFixed(0)}%' : '',
+        radius: 48,
+        titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+      );
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Miles by Trip', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 220,
+          child: Row(
+            children: [
+              Expanded(
+                child: PieChart(PieChartData(
+                  sections: sections,
+                  centerSpaceRadius: 52,
+                  sectionsSpace: 2,
+                )),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: trips.asMap().entries.map((e) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10, height: 10,
+                          decoration: BoxDecoration(
+                            color: colors[e.key % colors.length],
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          e.value.name,
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionBreakdown() {
+    if (_selectedTrip == null || _selectedTrip!.sections.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(padding: EdgeInsets.only(top: 16, bottom: 8)),
+        ..._selectedTrip!.sections.asMap().entries.map((e) {
+          final index = e.key;
+          final section = e.value;
+          final stats = _calculateAdjustedProgress(section.startMile, section.endMile);
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildBaseProgressBar(
+              stats.percentage,
+              stats.coveredWithExtra,
+              stats.adjustedTotal,
+              section.name,
+              color: sectionColor(_selectedTrip!.id!, index),
+            ),
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  double _calculateUniqueCoverage(double rangeStart, double rangeEnd) {
+    if (_chartEntries.isEmpty) return 0.0;
+
+    List<List<double>> ranges = _chartEntries.map((e) {
+      double start = e.startMile < e.endMile ? e.startMile : e.endMile;
+      double end = e.startMile < e.endMile ? e.endMile : e.startMile;
+      return [start, end];
+    }).toList();
+
+    ranges.sort((a, b) => a[0].compareTo(b[0]));
+
+    List<List<double>> merged = [];
+    if (ranges.isNotEmpty) {
+      var current = ranges[0];
+      for (int i = 1; i < ranges.length; i++) {
+        if (ranges[i][0] <= current[1]) {
+          if (ranges[i][1] > current[1]) current[1] = ranges[i][1];
+        } else {
+          merged.add(current);
+          current = ranges[i];
+        }
+      }
+      merged.add(current);
+    }
+
+    double totalCoverage = 0;
+    for (var m in merged) {
+      double overlapStart = m[0] > rangeStart ? m[0] : rangeStart;
+      double overlapEnd = m[1] < rangeEnd ? m[1] : rangeEnd;
+      if (overlapStart < overlapEnd) {
+        totalCoverage += (overlapEnd - overlapStart);
+      }
+    }
+    return totalCoverage;
+  }
+
+  int _zeroDays() {
+    final Map<String, double> dailyMiles = {};
+    for (final e in _filteredChartEntries) {
+      final day = e.date.toIso8601String().substring(0, 10);
+      dailyMiles[day] = (dailyMiles[day] ?? 0) + _entryDistance(e);
+    }
+    return dailyMiles.values.where((v) => v == 0).length;
+  }
+
+  ProgressData _calculateAdjustedProgress(double rangeStart, double rangeEnd) {
+    final uniqueTrailCoverage = _calculateUniqueCoverage(rangeStart, rangeEnd);
+
+    final relevantEntries = _chartEntries.where((e) =>
+      e.endMile > rangeStart && e.endMile <= rangeEnd).toList();
+
+    final sectionExtra = _includeExtraSkippedMiles
+        ? relevantEntries.fold(0.0, (sum, e) => sum + e.extraMiles)
+        : 0.0;
+    final sectionSkipped = _includeExtraSkippedMiles
+        ? relevantEntries.fold(0.0, (sum, e) => sum + e.skippedMiles)
+        : 0.0;
+
+    double covered = uniqueTrailCoverage + sectionExtra - sectionSkipped;
+    double total = (rangeEnd - rangeStart) - sectionSkipped + sectionExtra;
+
+    return ProgressData(covered, total);
+  }
+}
+
+class ProgressData {
+  final double coveredWithExtra;
+  final double adjustedTotal;
+  ProgressData(this.coveredWithExtra, this.adjustedTotal);
+
+  double get percentage => adjustedTotal > 0 ? (coveredWithExtra / adjustedTotal).clamp(0.0, 1.0) : 0.0;
 }

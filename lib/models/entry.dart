@@ -1,16 +1,8 @@
 // models/entry.dart
 // Represents a single day's hiking entry
+import 'direction.dart';
 
-enum Direction {
-  nobo,   // Northbound
-  sobo,   // Southbound
-  eabo,
-  webo,
-  forward,
-  backward, 
-  clockwise,
-  counterclockwise,
-}
+
 
 class Entry {
   final int? id;
@@ -25,6 +17,10 @@ class Entry {
   final bool? shower; // Did they shower today?
   final String notes;
   final Direction? direction;
+  final double? latitude;
+  final double? longitude;
+  final double? elevationGain;
+  final double? elevationLoss;
   
   Entry({
     this.id,
@@ -39,6 +35,10 @@ class Entry {
     this.shower,
     this.notes = '',
     this.direction,
+    this.latitude,
+    this.longitude,
+    this.elevationGain,
+  this.elevationLoss,
   });
   
   // Calculated property - net distance from start to end
@@ -62,6 +62,10 @@ class Entry {
       'shower': shower != null ? (shower! ? 1 : 0) : null,
       'notes': notes,
       'direction': direction?.index,
+      'latitude': latitude,
+      'longitude': longitude,
+      'elevation_gain': elevationGain,
+      'elevation_loss': elevationLoss,
     };
   }
   
@@ -85,6 +89,10 @@ class Entry {
       direction: map['direction'] != null  // ← ADD THESE LINES
         ? Direction.values[map['direction'] as int]
         : null,
+      latitude: map['latitude'] as double?,
+      longitude: map['longitude'] as double?,
+      elevationGain: map['elevation_gain'] as double?,
+      elevationLoss: map['elevation_loss'] as double?,
     );
   }
   
@@ -101,6 +109,10 @@ class Entry {
     bool? shower,
     String? notes,
     Direction? direction,
+    double? latitude,
+    double? longitude,  
+    double? elevationGain,
+    double? elevationLoss,
   }) {
     return Entry(
       id: id ?? this.id,
@@ -115,6 +127,10 @@ class Entry {
       shower: shower ?? this.shower,
       notes: notes ?? this.notes,
       direction: direction ?? this.direction,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      elevationGain: elevationGain ?? this.elevationGain,
+      elevationLoss: elevationLoss ?? this.elevationLoss,
     );
   }
 }
