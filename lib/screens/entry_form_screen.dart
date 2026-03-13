@@ -414,7 +414,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                     value: _selectedDirection,
                     items: Direction.values.map((d) => DropdownMenuItem(
                       value: d,
-                      child: Text(d.toString().split('.').last.toUpperCase()),
+                      child: Text(d.toString().split('.').last),
                     )).toList(),
                     onChanged: (value) => setState(() => _selectedDirection = value),
                   ),

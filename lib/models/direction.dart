@@ -1,10 +1,10 @@
 enum Direction {
-  nobo,   // Northbound
-  sobo,   // Southbound
-  eabo,
-  webo,
-  forward,
-  backward, 
-  clockwise,
-  counterclockwise,
+  NOBO,   // Northbound
+  SOBO,   // Southbound
+  Eastbound,
+  Westbound,
+  Forward,
+  Backward, 
+  Clockwise,
+  Counterclockwise,
 }

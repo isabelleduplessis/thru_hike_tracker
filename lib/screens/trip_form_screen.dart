@@ -221,7 +221,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
               items: Direction.values
                   .map((d) => DropdownMenuItem(
                         value: d,
-                        child: Text(d.name.toUpperCase()),
+                        child: Text(d.name),
                       ))
                   .toList(),
               onChanged: (v) => setState(() => _direction = v),

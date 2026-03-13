@@ -7,6 +7,11 @@ import '../models/trip.dart';
 import '../repositories/trip_repository.dart';
 import 'trip_detail_screen.dart';
 import 'trip_form_screen.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import '../services/import_service.dart';
+import 'package:share_plus/share_plus.dart';
 
 class TripListScreen extends StatefulWidget {
   const TripListScreen({Key? key}) : super(key: key);
@@ -19,6 +24,8 @@ class _TripListScreenState extends State<TripListScreen> {
   final TripRepository _tripRepository = TripRepository();
   List<Trip> _trips = [];
   bool _isLoading = true;
+  final ImportService _importService = ImportService();
+  bool _isImporting = false;
 
   @override
   void initState() {
@@ -44,6 +51,31 @@ class _TripListScreenState extends State<TripListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Hikes'),
+        actions: [
+          if (_isImporting)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'import') _importCsv();
+                if (value == 'template') _downloadTemplate();
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'import',
+                  child: Row(children: [Icon(Icons.upload_file), SizedBox(width: 12), Text('Import from CSV')]),
+                ),
+                const PopupMenuItem(
+                  value: 'template',
+                  child: Row(children: [Icon(Icons.download), SizedBox(width: 12), Text('Download template')]),
+                ),
+              ],
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -86,12 +118,12 @@ class _TripListScreenState extends State<TripListScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'No trips yet!',
+            'No hikes yet!',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap the + button to start your first adventure',
+            'Tap the + button to start your first hike',
             style: TextStyle(color: Colors.grey[600]),
           ),
         ],
@@ -201,6 +233,76 @@ class _TripListScreenState extends State<TripListScreen> {
         return 'Active';
       case TripStatus.completed:
         return 'Completed';
+    }
+  }
+
+  Future<void> _importCsv() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (result == null || result.files.single.path == null) return;
+    setState(() => _isImporting = true);
+    final importResult = await _importService.importFromCsv(result.files.single.path!);
+    setState(() => _isImporting = false);
+    if (!mounted) return;
+    if (!importResult.success) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Import Failed'),
+          content: Text(importResult.error!),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+    await _loadTrips();
+    if (!mounted) return;
+    final message = importResult.warning != null
+        ? '${importResult.entriesCreated} entries imported.\n\n⚠️ ${importResult.warning}'
+        : '${importResult.entriesCreated} entries imported successfully.';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import Complete'),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              if (importResult.trip != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => TripDetailScreen(trip: importResult.trip!)),
+                ).then((_) => _loadTrips());
+              }
+            },
+            child: const Text('View Hike'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _downloadTemplate() async {
+    const template =
+        '"name","date","direction","start","end","units","notes"\n'
+        '"Pacific Crest Trail","2025-04-15","NOBO",0.0,20.0,"mi",First day on trail!\n';
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/hike_entry_template.csv');
+      await file.writeAsString(template);
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Hike Entry Template',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not share template: $e')),
+      );
     }
   }
 }
