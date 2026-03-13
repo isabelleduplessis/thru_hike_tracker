@@ -101,16 +101,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
   Map<int, int> _calculateDayNumbers() {
-    // Sort entries by date (oldest first)
-    final sortedEntries = List<Entry>.from(_entries)
-      ..sort((a, b) => a.date.compareTo(b.date));
-    
-    // Assign day numbers
+    // Get sorted unique dates
+    final uniqueDates = _entries
+        .map((e) => DateTime(e.date.year, e.date.month, e.date.day))
+        .toSet()
+        .toList()
+      ..sort();
+
+    // Map each entry to the rank of its date
     final dayNumbers = <int, int>{};
-    for (int i = 0; i < sortedEntries.length; i++) {
-      dayNumbers[sortedEntries[i].id!] = i + 1;
+    for (final entry in _entries) {
+      final dateKey = DateTime(entry.date.year, entry.date.month, entry.date.day);
+      dayNumbers[entry.id!] = uniqueDates.indexOf(dateKey) + 1;
     }
-    
+
     return dayNumbers;
   }
   @override

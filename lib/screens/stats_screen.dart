@@ -296,52 +296,39 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _buildMainStats() {
     return Column(
       children: [
+        // First row — always show Total Distance, only pair with Total Days if trip selected
         Row(
           children: [
             Expanded(
-              child: _buildStatCard(
-                'Total Distance',
-                _settings.formatDistance(_totalMiles),
-                Icons.terrain,
-                Colors.green,
-              ),
+              child: _buildStatCard('Total Distance', _settings.formatDistance(_totalMiles), Icons.terrain, Colors.green),
             ),
             const SizedBox(width: 10),
-            Expanded(
-              child: _buildStatCard(
-                'Total Days',
-                _totalDays.toString(),
-                Icons.calendar_today,
-                Colors.blue,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                'Avg Per Day',
-                _settings.formatDistance(_averageMiles),
-                Icons.trending_up,
-                Colors.orange,
-              ),
-            ),
-            const SizedBox(width: 10),
-            if (_selectedTrip != null && _includeZeroDays)
+            if (_selectedTrip != null)
               Expanded(
-                child: _buildStatCard(
-                  'Zero Days',
-                  _zeroDays().toString(),
-                  Icons.bedtime,
-                  Colors.blueGrey,
-                ),
+                child: _buildStatCard('Total Days', _totalDays.toString(), Icons.calendar_today, Colors.blue),
               )
             else
               const Expanded(child: SizedBox.shrink()),
           ],
         ),
+        const SizedBox(height: 10),
+        if (_selectedTrip != null) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard('Avg Per Day', _settings.formatDistance(_averageMiles), Icons.trending_up, Colors.orange),
+              ),
+              const SizedBox(width: 10),
+              if (_includeZeroDays)
+                Expanded(
+                  child: _buildStatCard('Zero Days', _zeroDays().toString(), Icons.bedtime, Colors.blueGrey),
+                )
+              else
+                const Expanded(child: SizedBox.shrink()),
+            ],
+          ),
+        ],
         const SizedBox(height: 10),
         Row(
           children: [
@@ -623,7 +610,7 @@ class _StatsScreenState extends State<StatsScreen> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
-        if (_filteredChartEntries.length > 1)
+        if (_filteredChartEntries.map((e) => e.date.toIso8601String().substring(0, 10)).toSet().length > 1)
           SizedBox(
             height: 260,
             child: _buildLineChart(),

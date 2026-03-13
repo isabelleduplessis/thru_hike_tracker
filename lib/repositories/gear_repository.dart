@@ -139,7 +139,7 @@ class GearRepository {
     // Calculate total miles and days used
     final result = await db.rawQuery('''
       SELECT 
-        COUNT(DISTINCT eg.entry_id) as days_used,
+        COUNT(DISTINCT DATE(e.date)) as days_used,
         SUM((e.end_mile - e.start_mile) + e.extra_miles - e.skipped_miles) as total_miles,
         MIN(e.date) as first_used,
         MAX(e.date) as last_used
@@ -190,8 +190,8 @@ class GearRepository {
     
     final result = await db.rawQuery('''
       SELECT 
-        COUNT(DISTINCT eg.entry_id) as days_used,
-        SUM((e.end_mile - e.start_mile) + e.extra_miles - e.skipped_miles) as total_miles,
+        COUNT(DISTINCT DATE(e.date)) as days_used,
+        SUM(ABS(e.end_mile - e.start_mile) + e.extra_miles - e.skipped_miles) as total_miles,
         MIN(e.date) as first_used,
         MAX(e.date) as last_used
       FROM entry_gear eg

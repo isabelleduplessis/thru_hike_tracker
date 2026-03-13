@@ -351,5 +351,14 @@ class EntryRepository {
 
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
+  Future<double?> getLastEndMileForTrip(int tripId) async {
+    final db = await _dbHelper.database;
+    final result = await db.rawQuery(
+      'SELECT end_mile FROM entries WHERE trip_id = ? ORDER BY id DESC LIMIT 1',
+      [tripId],
+    );
+    if (result.isEmpty) return null;
+    return (result.first['end_mile'] as num).toDouble();
+  }
 
 }

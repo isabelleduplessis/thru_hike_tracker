@@ -42,7 +42,7 @@ class Entry {
   });
   
   // Calculated property - net distance from start to end
-  double get netDistance => endMile - startMile;
+  double get netDistance => (endMile - startMile).abs();
   
   // Calculated property - total distance including adjustments
   // This is what gets added to stats and gear mileage

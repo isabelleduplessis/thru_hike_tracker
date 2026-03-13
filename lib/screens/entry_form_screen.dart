@@ -1,6 +1,4 @@
 // screens/entry_form_screen.dart
-// Form for creating or editing a daily entry
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/trip.dart';
@@ -16,8 +14,8 @@ import 'package:geolocator/geolocator.dart';
 
 class EntryFormScreen extends StatefulWidget {
   final Trip trip;
-  final Entry? entry;  // null = creating new, not null = editing existing
-  
+  final Entry? entry;
+
   const EntryFormScreen({
     Key? key,
     required this.trip,
@@ -32,11 +30,12 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final EntryRepository _entryRepository = EntryRepository();
   final GearRepository _gearRepository = GearRepository();
+  final CustomFieldRepository _customFieldRepository = CustomFieldRepository();
+  final _settings = SettingsService();
+
   List<Gear> _availableGear = [];
   List<int> _selectedGearIds = [];
-  final _settings = SettingsService();
-  
-  // Controllers for text inputs
+
   final _startMileController = TextEditingController();
   final _endMileController = TextEditingController();
   final _extraMilesController = TextEditingController();
@@ -45,120 +44,104 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   final _notesController = TextEditingController();
   final _elevationGainController = TextEditingController();
   final _elevationLossController = TextEditingController();
-  
-  // State variables
+  final _sectionController = TextEditingController();
+
   DateTime _selectedDate = DateTime.now();
   Direction? _selectedDirection;
-  bool? _isTent;  // true = tent, false = shelter, null = not set
+  bool? _isTent;
   bool _hadShower = false;
   bool _isSaving = false;
-  final CustomFieldRepository _customFieldRepository = CustomFieldRepository();
+
   List<CustomFieldWithValue> _customFields = [];
-  Map<int, TextEditingController> _customFieldControllers = {};  // For text/number fields
-  Map<int, bool> _customFieldYesNo = {};  // For yes/no fields
-  Map<int, int> _customFieldRatings = {};  // For rating fields
+  Map<int, TextEditingController> _customFieldControllers = {};
+  Map<int, bool> _customFieldYesNo = {};
+  Map<int, int> _customFieldRatings = {};
+
   double? _latitude;
   double? _longitude;
   bool _isFetchingLocation = false;
-  // non text inputs use state variables
 
-  final _sectionController = TextEditingController();
+  InputDecoration _slimDecoration(String label, {String? suffixText}) {
+    return InputDecoration(
+      labelText: label,
+      suffixText: suffixText,
+      border: const OutlineInputBorder(),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      isDense: true,
+    );
+  }
+
+  // Only removes the divider line, keeps natural highlight
+  Theme _quietExpansion({required Widget child}) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        dividerColor: Colors.transparent,
+      ),
+      child: child,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _loadGear();
     _loadCustomFields();
-    
-    // If editing existing entry, populate the form
+
     if (widget.entry != null) {
       final entry = widget.entry!;
-      _startMileController.text = entry.startMile.toString();
-      _endMileController.text = entry.endMile.toString();
-      _extraMilesController.text = entry.extraMiles.toString();
-      _skippedMilesController.text = entry.skippedMiles.toString();
       _locationController.text = entry.location ?? '';
       _notesController.text = entry.notes;
-      
       _selectedDate = entry.date;
       _selectedDirection = entry.direction;
       _isTent = entry.tentOrShelter;
       _hadShower = entry.shower ?? false;
-
       _latitude = entry.latitude;
       _longitude = entry.longitude;
+      _sectionController.text = _determineSection(entry.endMile);
 
-      _sectionController.text = _determineSection(widget.entry!.endMile);
+      _startMileController.text = _settings.convertToDisplayUnit(entry.startMile).toStringAsFixed(2);
+      _endMileController.text = _settings.convertToDisplayUnit(entry.endMile).toStringAsFixed(2);
+      _extraMilesController.text = _settings.convertToDisplayUnit(entry.extraMiles).toStringAsFixed(2);
+      _skippedMilesController.text = _settings.convertToDisplayUnit(entry.skippedMiles).toStringAsFixed(2);
+      _elevationGainController.text = entry.elevationGain != null
+          ? _settings.convertToDisplayElevation(entry.elevationGain!).toStringAsFixed(0)
+          : '';
+      _elevationLossController.text = entry.elevationLoss != null
+          ? _settings.convertToDisplayElevation(entry.elevationLoss!).toStringAsFixed(0)
+          : '';
 
-      _elevationGainController.text = entry.elevationGain?.toString() ?? '';
-      _elevationLossController.text = entry.elevationLoss?.toString() ?? '';
-      
-      // Load gear for this entry
       _loadGearForEntry();
     } else {
-      // New entry - set default values
       _extraMilesController.text = '0.0';
       _skippedMilesController.text = '0.0';
+      _selectedDirection = widget.trip.direction;
+      _loadNewEntryDefaults();
     }
   }
 
-  Future<void> _fetchLocation() async {
-    setState(() => _isFetchingLocation = true);
-
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permission permanently denied. Enable it in Settings.')),
-          );
-        }
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      print('Location result: ${position.latitude}, ${position.longitude}');
+  Future<void> _loadNewEntryDefaults() async {
+    final lastEndMile = await _entryRepository.getLastEndMileForTrip(widget.trip.id!);
+    if (mounted) {
       setState(() {
-        _latitude = position.latitude;
-        _longitude = position.longitude;
+        final defaultMile = lastEndMile ?? widget.trip.startMile;
+        _startMileController.text = _settings.convertToDisplayUnit(defaultMile).toStringAsFixed(2);
       });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not get location: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isFetchingLocation = false);
     }
-    
   }
 
   Future<void> _loadCustomFields() async {
     final fieldsWithValues = await _customFieldRepository.getCustomFieldsWithValues(
       widget.trip.id!,
-      widget.entry?.id ?? 0,  // 0 if creating new entry
+      widget.entry?.id ?? 0,
     );
-    
     setState(() {
       _customFields = fieldsWithValues;
-      
-      // Initialize controllers and values
-      for (var fieldWithValue in fieldsWithValues) {
-        final field = fieldWithValue.field;
-        final value = fieldWithValue.value ?? '';
-        
+      for (var fwv in fieldsWithValues) {
+        final field = fwv.field;
+        final value = fwv.value ?? '';
         if (field.type == CustomFieldType.text || field.type == CustomFieldType.number) {
-          // For new entries, default number fields to '0'
           String defaultValue = value;
-          if (field.type == CustomFieldType.number) {
-            defaultValue = value.isEmpty ? '0' : value;
-          }
+          if (field.type == CustomFieldType.number) defaultValue = value.isEmpty ? '0' : value;
           _customFieldControllers[field.id!] = TextEditingController(text: defaultValue);
         } else if (field.type == CustomFieldType.checkbox) {
           _customFieldYesNo[field.id!] = value == 'true';
@@ -168,10 +151,9 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       }
     });
   }
-  
+
   @override
   void dispose() {
-    // Clean up controllers when widget is disposed
     _startMileController.dispose();
     _endMileController.dispose();
     _extraMilesController.dispose();
@@ -180,24 +162,15 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     _notesController.dispose();
     _sectionController.dispose();
     _elevationGainController.dispose();
-  _elevationLossController.dispose();
-    
-    // Clean up custom field controllers
-    for (var controller in _customFieldControllers.values) {
-      controller.dispose();
-    }
-    
+    _elevationLossController.dispose();
+    for (var c in _customFieldControllers.values) c.dispose();
     super.dispose();
   }
-  
 
   Future<void> _loadGear() async {
     final gear = await _gearRepository.getActiveGearOnDate(_selectedDate);
-    
     setState(() {
       _availableGear = gear;
-      
-      // Auto-check all active gear for NEW entries
       if (widget.entry == null) {
         _selectedGearIds = gear.map((g) => g.id!).toList();
       }
@@ -205,51 +178,102 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   }
 
   Future<void> _loadGearForEntry() async {
-    if (widget.entry != null) {
-      // Get gear that's currently linked
-      final linkedGear = await _gearRepository.getGearForEntry(widget.entry!.id!);
-      
-      // Get gear that was active on this date
-      final activeGear = await _gearRepository.getActiveGearOnDate(_selectedDate);
-      
-      // Combine both (remove duplicates)
-      final allGearIds = <int>{};
-      final allGear = <Gear>[];
-      
-      for (final gear in [...activeGear, ...linkedGear]) {
-        if (!allGearIds.contains(gear.id)) {
-          allGearIds.add(gear.id!);
-          allGear.add(gear);
-        }
+    if (widget.entry == null) return;
+    final linkedGear = await _gearRepository.getGearForEntry(widget.entry!.id!);
+    final activeGear = await _gearRepository.getActiveGearOnDate(_selectedDate);
+    final allGearIds = <int>{};
+    final allGear = <Gear>[];
+    for (final gear in [...activeGear, ...linkedGear]) {
+      if (!allGearIds.contains(gear.id)) {
+        allGearIds.add(gear.id!);
+        allGear.add(gear);
       }
-      
-      setState(() {
-        _availableGear = allGear;
-        _selectedGearIds = linkedGear.map((g) => g.id!).toList();
-      });
+    }
+    setState(() {
+      _availableGear = allGear;
+      _selectedGearIds = linkedGear.map((g) => g.id!).toList();
+    });
+  }
+
+  Future<void> _fetchLocation() async {
+    setState(() => _isFetchingLocation = true);
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission permanently denied. Enable it in Settings.')),
+        );
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      setState(() { _latitude = position.latitude; _longitude = position.longitude; });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not get location: $e')));
+    } finally {
+      if (mounted) setState(() => _isFetchingLocation = false);
     }
   }
 
+  Future<void> _enterCoordinatesManually() async {
+    final latController = TextEditingController(text: _latitude?.toString() ?? '');
+    final lngController = TextEditingController(text: _longitude?.toString() ?? '');
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enter Coordinates'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: latController,
+              decoration: const InputDecoration(labelText: 'Latitude', hintText: 'e.g. 37.12345', border: OutlineInputBorder()),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: lngController,
+              decoration: const InputDecoration(labelText: 'Longitude', hintText: 'e.g. -119.12345', border: OutlineInputBorder()),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              final lat = double.tryParse(latController.text);
+              final lng = double.tryParse(lngController.text);
+              if (lat != null && lng != null) {
+                setState(() { _latitude = lat; _longitude = lng; });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _saveEntry() async {
-    // Validate form
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-    
-    setState(() {
-      _isSaving = true;
-    });
-    
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
     try {
-      // Create entry object from form data
       final entry = Entry(
-        id: widget.entry?.id,  // Keep ID if editing, null if creating
+        id: widget.entry?.id,
         tripId: widget.trip.id!,
         date: _selectedDate,
-        startMile: double.parse(_startMileController.text),
-        endMile: double.parse(_endMileController.text),
-        extraMiles: double.tryParse(_extraMilesController.text) ?? 0.0,
-        skippedMiles: double.tryParse(_skippedMilesController.text) ?? 0.0,
+        startMile: _settings.convertFromDisplayUnit(double.parse(_startMileController.text)),
+        endMile: _settings.convertFromDisplayUnit(double.parse(_endMileController.text)),
+        extraMiles: _settings.convertFromDisplayUnit(double.tryParse(_extraMilesController.text) ?? 0.0),
+        skippedMiles: _settings.convertFromDisplayUnit(double.tryParse(_skippedMilesController.text) ?? 0.0),
+        elevationGain: _elevationGainController.text.isNotEmpty
+            ? _settings.convertFromDisplayElevation(double.parse(_elevationGainController.text))
+            : null,
+        elevationLoss: _elevationLossController.text.isNotEmpty
+            ? _settings.convertFromDisplayElevation(double.parse(_elevationLossController.text))
+            : null,
         location: _locationController.text.isEmpty ? null : _locationController.text,
         tentOrShelter: _isTent,
         shower: _hadShower,
@@ -257,426 +281,75 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
         direction: _selectedDirection,
         latitude: _latitude,
         longitude: _longitude,
-        elevationGain: double.tryParse(_elevationGainController.text),
-        elevationLoss: double.tryParse(_elevationLossController.text),
       );
-      
-      // Save to database
+
       Entry savedEntry;
       if (widget.entry == null) {
-        // Creating new entry
-        savedEntry = await _entryRepository.createEntry(entry);  // ← Capture returned entry
+        savedEntry = await _entryRepository.createEntry(entry);
       } else {
-        // Updating existing entry
         await _entryRepository.updateEntry(entry);
-        savedEntry = entry;  // ← Use the entry we just updated
+        savedEntry = entry;
       }
 
-      // Save gear linkages
       await _gearRepository.setGearForEntry(savedEntry.id!, _selectedGearIds);
 
-      //custom fields
       final customFieldValues = <int, String>{};
-      for (var fieldWithValue in _customFields) {
-        final field = fieldWithValue.field;
+      for (var fwv in _customFields) {
+        final field = fwv.field;
         String value = '';
-        
         if (field.type == CustomFieldType.text || field.type == CustomFieldType.number) {
           value = _customFieldControllers[field.id!]?.text ?? '';
         } else if (field.type == CustomFieldType.checkbox) {
           value = (_customFieldYesNo[field.id!] ?? false).toString();
         } else if (field.type == CustomFieldType.rating) {
           final rating = _customFieldRatings[field.id!] ?? 0;
-          if (rating > 0) {
-            value = rating.toString();
-          }
+          if (rating > 0) value = rating.toString();
         }
-        
-        if (value.isNotEmpty) {
-          customFieldValues[field.id!] = value;
-        }
+        if (value.isNotEmpty) customFieldValues[field.id!] = value;
       }
-
       if (customFieldValues.isNotEmpty) {
-        await _customFieldRepository.saveCustomFieldValues(
-          savedEntry.id!,
-          customFieldValues,
-        );
+        await _customFieldRepository.saveCustomFieldValues(savedEntry.id!, customFieldValues);
       }
 
-
-      
-      // Return to previous screen with success
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      // Show error
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving entry: $e')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving entry: $e')));
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  Widget _buildElevationInputs() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: _elevationGainController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Elevation Gain',
-              border: const OutlineInputBorder(),
-              suffixText: _settings.getElevationUnitLabel(),
-            ),
+  Future<void> _deleteEntry() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Entry'),
+        content: const Text('Are you sure you want to delete this entry? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: TextFormField(
-            controller: _elevationLossController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Elevation Loss',
-              border: const OutlineInputBorder(),
-              suffixText: _settings.getElevationUnitLabel(),
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
+    if (confirmed == true && mounted) {
+      try {
+        await _entryRepository.deleteEntry(widget.entry!.id!);
+        if (mounted) Navigator.pop(context, 'deleted');
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting entry: $e')));
+      }
+    }
   }
 
   String _determineSection(double mile) {
-    // We look at the sections inside the trip we passed to this screen
     for (var section in widget.trip.sections) {
-      if (mile >= section.startMile && mile <= section.endMile) {
-        return section.name;
-      }
+      if (mile >= section.startMile && mile <= section.endMile) return section.name;
     }
-    return ""; // Return empty if the mile doesn't fit anywhere
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.entry == null ? 'New Entry' : 'Edit Entry'),
-        actions: widget.entry != null  // ← ADD THIS ENTIRE SECTION
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: _deleteEntry,
-                  tooltip: 'Delete Entry',
-                ),
-              ]
-            : null,
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Date picker
-            _buildDatePicker(),
-            const SizedBox(height: 16),
-            
-            // Mile inputs
-            Row(
-              children: [
-                Expanded(child: _buildStartMileInput()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildEndMileInput()),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Adjustments
-            Row(
-              children: [
-                Expanded(child: _buildExtraMilesInput()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildSkippedMilesInput()),
-              ],
-            ),
-            
-            if (widget.trip.trackElevation) ...[
-              const SizedBox(height: 16),
-              _buildElevationInputs(),
-            ],
-
-            const SizedBox(height: 16),
-
-            _buildSectionDisplay(), 
-            const SizedBox(height: 16),
-            
-            if (widget.trip.trackCoordinates) ...[
-              _buildCoordinatesRow(),
-              const SizedBox(height: 16),
-            ],
-            
-            // Direction dropdown
-            _buildDirectionDropdown(),
-            const SizedBox(height: 16),
-            
-            if (widget.trip.trackSleeping) ...[
-              _buildTentShelterToggle(),
-              const SizedBox(height: 16),
-            ],
-            
-            if (widget.trip.trackShower) ...[
-              _buildShowerSwitch(),
-              const SizedBox(height: 16),
-            ],
-
-            // Custom Fields
-            if (_customFields.isNotEmpty) ...[
-              _buildCustomFieldsSection(),
-              const SizedBox(height: 16),
-            ],
-
-            // Gear selection
-            if (_availableGear.isNotEmpty) ...[
-              _buildGearSelector(),
-              const SizedBox(height: 16),
-            ],
-            // Notes
-            _buildNotesInput(),
-            const SizedBox(height: 24),
-
-            // Save button
-            FilledButton(
-              onPressed: _isSaving ? null : _saveEntry,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: _isSaving
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(
-                        widget.entry == null ? 'Create Entry' : 'Update Entry',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDatePicker() {
-    return Row(
-      children: [
-        const Text(
-          "Date:",
-          // style: TextStyle(fontSize: 16),
-        ),
-        const SizedBox(width: 8),
-        TextButton(
-          onPressed: _pickDate,
-          child: Text(DateFormat.yMMMd().format(_selectedDate)),
-        ),
-      ],
-    );
-  }
-
-
-  Widget _buildStartMileInput() {
-    return TextFormField(
-      controller: _startMileController,
-      keyboardType: TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(
-        labelText: 'Start ${_settings.getDistanceUnitLabel() == "km" ? "KM" : "Mile"}',
-        border: const OutlineInputBorder(),
-      ),
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'Please enter start mile';
-        }
-        if (double.tryParse(value) == null) {
-          return 'Please enter a valid number';
-        }
-        return null;
-      },
-    );
-  }
-
-
-
-  Widget _buildEndMileInput() {
-    return TextFormField(
-      controller: _endMileController,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(
-        labelText: 'End ${_settings.getDistanceUnitLabel() == "km" ? "KM" : "Mile"}',
-        border: const OutlineInputBorder(),
-      ),
-      onChanged: (value) {
-        final inputMile = double.tryParse(value);
-        if (inputMile != null) {
-          final baseMile = _settings.convertFromDisplayUnit(inputMile);
-          final foundSection = _determineSection(baseMile);
-          
-          // WE ONLY UPDATE THE SECTION CONTROLLER HERE
-          setState(() {
-            _sectionController.text = foundSection;
-          });
-        }
-      },
-      validator: (value) {
-        if (value == null || value.isEmpty) return 'Please enter end marker';
-        if (double.tryParse(value) == null) return 'Please enter a valid number';
-        return null;
-      },
-    );
-  }
-
-
-  Widget _buildExtraMilesInput() {
-    return TextFormField(
-      controller: _extraMilesController,
-      keyboardType: TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(
-        labelText: '+ Distance ${_settings.getDistanceUnitLabel()}',
-        border: const OutlineInputBorder(),
-      ),
-    );
-  }
-
-  Widget _buildSkippedMilesInput() {
-    return TextFormField(
-      controller: _skippedMilesController,
-      keyboardType: TextInputType.numberWithOptions(decimal: true),
-      // Skipped Miles
-      decoration: InputDecoration(
-        labelText: '- Distance ${_settings.getDistanceUnitLabel()}',
-        border: const OutlineInputBorder(),
-      ),
-    );
-  }
-
-  // NEW WIDGET
-  Widget _buildSectionDisplay() {
-    return TextFormField(
-      controller: _sectionController,
-      readOnly: true, // User cannot edit this, it's auto-calculated
-      decoration: InputDecoration(
-        labelText: 'Section',
-        filled: true,
-        fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
-        suffixIcon: const Icon(Icons.map_outlined),
-        border: const OutlineInputBorder(),
-        // helperText: 'Based on your end mile and trip settings.',
-      ),
-    );
-  }
-
-  // RESTORED LOCATION WIDGET (Removed the auto-fill logic)
-  Widget _buildLocationInput() {
-    return TextFormField(
-      controller: _locationController,
-      decoration: const InputDecoration(
-        labelText: 'Location ',
-        border: OutlineInputBorder(),
-        suffixIcon: Icon(Icons.location_on_outlined),
-      )
-    );
-  }
-
-  Widget _buildDirectionDropdown() {
-    return DropdownButtonFormField<Direction>(
-      decoration: const InputDecoration(
-        labelText: 'Direction',
-        border: OutlineInputBorder(),
-      ),
-      value: _selectedDirection,
-      items: Direction.values.map((direction) {
-        return DropdownMenuItem(
-          value: direction,
-          child: Text(direction.toString().split('.').last),
-        );
-      }).toList(),
-      onChanged: (value) {
-        setState(() {
-          _selectedDirection = value;
-        });
-      },
-    );
-  }
-
-  Widget _buildTentShelterToggle() {
-    return Row(
-      children: [
-        const Text('Sleeping Arrangement:'),
-        const SizedBox(width: 16),
-        ToggleButtons(
-          isSelected: [
-            _isTent == true,
-            _isTent == false,
-          ],
-          onPressed: (index) {
-            setState(() {
-              if (index == 0) {
-                _isTent = true;
-              } else {
-                _isTent = false;
-              }
-            });
-          },
-          children: const [
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('Tent'),
-            ),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('Shelter'),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShowerSwitch() {
-    return Row(
-      children: [
-        const Text('Had Shower:'),
-        const SizedBox(width: 16),
-        Switch(
-          value: _hadShower,
-          onChanged: (value) {
-            setState(() {
-              _hadShower = value;
-            });
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNotesInput() {
-    return TextFormField(
-      controller: _notesController,
-      maxLines: 4,
-      decoration: const InputDecoration(
-        labelText: 'Notes',
-        border: OutlineInputBorder(),
-        alignLabelWithHint: true,
-      ),
-    );
+    return '';
   }
 
   Future<void> _pickDate() async {
@@ -687,100 +360,407 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       lastDate: DateTime(2100),
     );
     if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-      _loadGear();  // ← ADD THIS - Reload gear for new date
+      setState(() => _selectedDate = picked);
+      _loadGear();
     }
   }
 
-  Widget _buildGearSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Gear',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  @override
+  Widget build(BuildContext context) {
+    final unit = _settings.getDistanceUnitLabel() == 'km' ? 'KM' : 'Mile';
+    final distUnit = _settings.getDistanceUnitLabel();
+    final elevUnit = _settings.getElevationUnitLabel();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.entry == null ? 'New Entry' : 'Edit Entry'),
+        actions: widget.entry != null
+            ? [IconButton(icon: const Icon(Icons.delete), onPressed: _deleteEntry, tooltip: 'Delete Entry')]
+            : null,
+      ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          children: [
+
+            // ── Date ─────────────────────────────────────────────────
+            InkWell(
+              onTap: _pickDate,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.calendar_today, size: 15),
+                    const SizedBox(width: 6),
+                    Text(
+                      DateFormat.yMMMd().format(_selectedDate),
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // ── Direction + Section ───────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<Direction>(
+                    decoration: _slimDecoration('Direction'),
+                    value: _selectedDirection,
+                    items: Direction.values.map((d) => DropdownMenuItem(
+                      value: d,
+                      child: Text(d.toString().split('.').last.toUpperCase()),
+                    )).toList(),
+                    onChanged: (value) => setState(() => _selectedDirection = value),
+                  ),
+                ),
+                if (widget.trip.sections.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _sectionController,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Section',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        isDense: true,
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // ── Start / End mile ──────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _startMileController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: _slimDecoration('Start $unit'),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (double.tryParse(v) == null) return 'Invalid';
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _endMileController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: _slimDecoration('End $unit'),
+                    onChanged: (value) {
+                      final inputMile = double.tryParse(value);
+                      if (inputMile != null) {
+                        final baseMile = _settings.convertFromDisplayUnit(inputMile);
+                        setState(() => _sectionController.text = _determineSection(baseMile));
+                      }
+                    },
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (double.tryParse(v) == null) return 'Invalid';
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            // ── More (optional fields) ────────────────────────────────
+            const SizedBox(height: 6),
+            _quietExpansion(
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                title: const Text('More', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                children: [
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _extraMilesController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: _slimDecoration('+ Distance', suffixText: distUnit),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _skippedMilesController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: _slimDecoration('- Distance', suffixText: distUnit),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (widget.trip.trackElevation) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _elevationGainController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _slimDecoration('Elevation Gain', suffixText: elevUnit),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _elevationLossController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _slimDecoration('Elevation Loss', suffixText: elevUnit),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (widget.trip.trackCoordinates) ...[
+                    const SizedBox(height: 10),
+                    _buildCoordinatesRow(),
+                  ],
+                  if (widget.trip.trackSleeping) ...[
+                    const SizedBox(height: 8),
+                    _buildTentShelterToggle(),
+                  ],
+                  if (widget.trip.trackShower) ...[
+                    const SizedBox(height: 4),
+                    _buildShowerSwitch(),
+                  ],
+                ],
+              ),
+            ),
+
+            // ── Custom Fields ─────────────────────────────────────────
+            if (_customFields.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _quietExpansion(
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                  title: const Text('Custom Fields', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  initiallyExpanded: true,
+                  childrenPadding: const EdgeInsets.only(bottom: 4),
+                  children: [
+                    const SizedBox(height: 4),
+                    ..._customFields.map((fwv) => _buildCustomFieldInput(fwv.field)),
+                  ],
+                ),
+              ),
+            ],
+
+            // ── Gear ──────────────────────────────────────────────────
+            if (_availableGear.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _quietExpansion(
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                  title: const Text('Gear', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  initiallyExpanded: false,
+                  childrenPadding: const EdgeInsets.only(bottom: 4),
+                  children: _availableGear.map((gear) {
+                    final isSelected = _selectedGearIds.contains(gear.id);
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedGearIds.remove(gear.id);
+                          } else {
+                            _selectedGearIds.add(gear.id!);
+                          }
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Checkbox(
+                                value: isSelected,
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedGearIds.add(gear.id!);
+                                    } else {
+                                      _selectedGearIds.remove(gear.id);
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(gear.name, style: const TextStyle(fontSize: 14)),
+                            if (gear.category != null) ...[
+                              const SizedBox(width: 6),
+                              Text(gear.category!, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 10),
+
+            // ── Notes ─────────────────────────────────────────────────
+            TextFormField(
+              controller: _notesController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Notes',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                isDense: true,
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Save ──────────────────────────────────────────────────
+            FilledButton(
+              onPressed: _isSaving ? null : _saveEntry,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: _isSaving
+                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Text(
+                        widget.entry == null ? 'Create Entry' : 'Update Entry',
+                        style: const TextStyle(fontSize: 15),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
         ),
-        const SizedBox(height: 8),
-        if (_availableGear.isEmpty)
-          const Text('No gear items yet. Add some in the Gear tab!')
-        else
-          ..._availableGear.map((gear) {
-            final isSelected = _selectedGearIds.contains(gear.id);
-            return CheckboxListTile(
-              title: Text(gear.name),
-              subtitle: gear.category != null ? Text(gear.category!) : null,
-              value: isSelected,
-              onChanged: (bool? value) {
-                setState(() {
-                  if (value == true) {
-                    _selectedGearIds.add(gear.id!);
-                  } else {
-                    _selectedGearIds.remove(gear.id);
-                  }
-                });
-              },
-            );
-          }).toList(),
-      ],
+      ),
     );
   }
-  Widget _buildCustomFieldsSection() {
+
+  Widget _buildCoordinatesRow() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        ..._customFields.map((fieldWithValue) {
-          return _buildCustomFieldInput(fieldWithValue.field);
-        }),
+        Text('Coordinates', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _latitude != null && _longitude != null
+                    ? '${_latitude!.toStringAsFixed(5)}, ${_longitude!.toStringAsFixed(5)}'
+                    : 'No coordinates set',
+                style: TextStyle(fontSize: 13, color: _latitude != null ? null : Colors.grey),
+              ),
+            ),
+            _isFetchingLocation
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : IconButton(
+                    icon: const Icon(Icons.my_location, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Fetch location',
+                    onPressed: _fetchLocation,
+                  ),
+            const SizedBox(width: 12),
+            IconButton(
+              icon: const Icon(Icons.edit, size: 20),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              tooltip: 'Enter manually',
+              onPressed: _enterCoordinatesManually,
+            ),
+            if (_latitude != null) ...[
+              const SizedBox(width: 12),
+              IconButton(
+                icon: const Icon(Icons.clear, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Clear',
+                onPressed: () => setState(() { _latitude = null; _longitude = null; }),
+              ),
+            ],
+          ],
+        ),
       ],
     );
   }
+
+  Widget _buildTentShelterToggle() {
+    return Row(
+      children: [
+        const Text('Sleeping:', style: TextStyle(fontSize: 14)),
+        const SizedBox(width: 12),
+        ToggleButtons(
+          isSelected: [_isTent == true, _isTent == false],
+          onPressed: (index) => setState(() => _isTent = index == 0 ? true : false),
+          constraints: const BoxConstraints(minHeight: 32, minWidth: 64),
+          children: const [
+            Text('Tent', style: TextStyle(fontSize: 13)),
+            Text('Shelter', style: TextStyle(fontSize: 13)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShowerSwitch() {
+    return Row(
+      children: [
+        const Text('Shower:', style: TextStyle(fontSize: 14)),
+        const SizedBox(width: 12),
+        Switch(
+          value: _hadShower,
+          onChanged: (value) => setState(() => _hadShower = value),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ],
+    );
+  }
+
   Widget _buildCustomFieldInput(CustomField field) {
     switch (field.type) {
       case CustomFieldType.text:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 150,
-                child: Text(
-                  '${field.name}:',
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ),
-              Expanded(
-                child: TextFormField(
-                  controller: _customFieldControllers[field.id!],
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                ),
-              ),
-            ],
+          padding: const EdgeInsets.only(bottom: 10),
+          child: TextFormField(
+            controller: _customFieldControllers[field.id!],
+            decoration: _slimDecoration(field.name),
           ),
         );
-        
+
       case CustomFieldType.number:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 10),
           child: Row(
             children: [
-              Text(
-                '${field.name}:',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(width: 8),
+              Text('${field.name}:', style: const TextStyle(fontSize: 14)),
+              const SizedBox(width: 10),
               SizedBox(
                 width: 80,
                 child: TextFormField(
                   controller: _customFieldControllers[field.id!],
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    isDense: true,
                   ),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textAlign: TextAlign.center,
@@ -789,209 +769,48 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
             ],
           ),
         );
-        
+
       case CustomFieldType.checkbox:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              Text(
-                '${field.name}:',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(width: 16),
-              Checkbox(
-                value: _customFieldYesNo[field.id!] ?? false,
-                onChanged: (value) {
-                  setState(() {
-                    _customFieldYesNo[field.id!] = value ?? false;
-                  });
-                },
+              Text('${field.name}:', style: const TextStyle(fontSize: 14)),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: Checkbox(
+                  value: _customFieldYesNo[field.id!] ?? false,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onChanged: (value) => setState(() => _customFieldYesNo[field.id!] = value ?? false),
+                ),
               ),
             ],
           ),
         );
-        
+
       case CustomFieldType.rating:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              Text(
-                '${field.name}:',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(width: 16),
+              Text('${field.name}:', style: const TextStyle(fontSize: 14)),
+              const SizedBox(width: 12),
               ...List.generate(5, (index) {
                 final rating = _customFieldRatings[field.id!] ?? 0;
-                return IconButton(
-                  icon: Icon(
+                return GestureDetector(
+                  onTap: () => setState(() => _customFieldRatings[field.id!] = index + 1),
+                  child: Icon(
                     index < rating ? Icons.star : Icons.star_border,
                     color: Colors.amber,
-                    size: 28,
+                    size: 24,
                   ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () {
-                    setState(() {
-                      _customFieldRatings[field.id!] = index + 1;
-                    });
-                  },
                 );
               }),
             ],
           ),
         );
     }
-  }
-  Future<void> _deleteEntry() async {
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Entry'),
-        content: const Text(
-          'Are you sure you want to delete this entry? This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        await _entryRepository.deleteEntry(widget.entry!.id!);
-        if (mounted) {
-          Navigator.pop(context, 'deleted');  // Signal deletion
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting entry: $e')),
-          );
-        }
-      }
-    }
-  }
-
-  Widget _buildCoordinatesRow() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Coordinates', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                _latitude != null && _longitude != null
-                    ? '${_latitude!.toStringAsFixed(5)}, ${_longitude!.toStringAsFixed(5)}'
-                    : 'No coordinates set',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _latitude != null ? null : Colors.grey,
-                ),
-              ),
-            ),
-            _isFetchingLocation
-                ? const SizedBox(
-                    width: 24, height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : IconButton(
-                    icon: const Icon(Icons.my_location),
-                    tooltip: 'Fetch current location',
-                    onPressed: _fetchLocation,
-                  ),
-            IconButton(
-              icon: const Icon(Icons.edit),
-              tooltip: 'Enter coordinates manually',
-              onPressed: _enterCoordinatesManually,
-            ),
-            if (_latitude != null)
-              IconButton(
-                icon: const Icon(Icons.clear),
-                tooltip: 'Clear coordinates',
-                onPressed: () => setState(() {
-                  _latitude = null;
-                  _longitude = null;
-                }),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-  Future<void> _enterCoordinatesManually() async {
-    final latController = TextEditingController(
-      text: _latitude?.toString() ?? '',
-    );
-    final lngController = TextEditingController(
-      text: _longitude?.toString() ?? '',
-    );
-
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Enter Coordinates'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: latController,
-              decoration: const InputDecoration(
-                labelText: 'Latitude',
-                hintText: 'e.g. 37.12345',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true, signed: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: lngController,
-              decoration: const InputDecoration(
-                labelText: 'Longitude',
-                hintText: 'e.g. -119.12345',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true, signed: true,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final lat = double.tryParse(latController.text);
-              final lng = double.tryParse(lngController.text);
-              if (lat != null && lng != null) {
-                setState(() {
-                  _latitude = lat;
-                  _longitude = lng;
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -215,7 +215,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
             DropdownButtonFormField<Direction>(
               value: _direction,
               decoration: const InputDecoration(
-                labelText: 'Default Direction',
+                labelText: 'Direction',
                 border: OutlineInputBorder(),
               ),
               items: Direction.values

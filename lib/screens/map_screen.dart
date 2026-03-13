@@ -19,28 +19,25 @@ class _MapScreenState extends State<MapScreen> {
   final TripRepository _tripRepository = TripRepository();
   final EntryRepository _entryRepository = EntryRepository();
   final _settings = SettingsService();
-  
+  final MapController _mapController = MapController();
+
   List<Trip> _trips = [];
   List<Entry> _entries = [];
   Trip? _selectedTrip;
   bool _isLoading = true;
-  
+  bool _mapReady = false;
 
   Color _colorForEntry(Entry entry, Trip trip) {
     if (trip.sections.isEmpty) {
-      // No sections — use trip offset color
       final offset = trip.id! % sectionColors.length;
       return sectionColors[offset];
     }
-
     for (int i = 0; i < trip.sections.length; i++) {
       final section = trip.sections[i];
       if (entry.endMile >= section.startMile && entry.endMile <= section.endMile) {
         return sectionColor(trip.id!, i);
       }
     }
-
-    // Fallback if entry doesn't fall in any section
     final offset = trip.id! % sectionColors.length;
     return sectionColors[offset];
   }
@@ -51,33 +48,50 @@ class _MapScreenState extends State<MapScreen> {
     _loadData();
   }
 
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _fitToEntries(List<Entry> entries) {
+    if (entries.isEmpty) return;
+    final points = entries.map((e) => LatLng(e.latitude!, e.longitude!)).toList();
+    final fit = points.length == 1
+        ? CameraFit.coordinates(coordinates: points, minZoom: 12, maxZoom: 12)
+        : CameraFit.coordinates(coordinates: points, padding: const EdgeInsets.all(48));
+    _mapController.fitCamera(fit);
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-
     final trips = await _tripRepository.getAllTrips();
     final entries = await _entryRepository.getEntriesWithCoordinates();
-
     setState(() {
       _trips = trips;
       _entries = entries;
       _selectedTrip = null;
       _isLoading = false;
     });
+    if (_mapReady) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitToEntries(entries));
+    }
+    // if not ready, onMapReady will call _fitToEntries
   }
 
   Future<void> _loadForTrip(Trip trip) async {
     setState(() => _isLoading = true);
-
     final entries = await _entryRepository.getEntriesWithCoordinatesForTrip(trip.id!);
-
     setState(() {
       _selectedTrip = trip;
       _entries = entries;
       _isLoading = false;
     });
+    if (_mapReady) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitToEntries(entries));
+    }
   }
 
-  // Find the trip an entry belongs to (for color coding on all-trips view)
   Trip? _tripForEntry(Entry entry) {
     try {
       return _trips.firstWhere((t) => t.id == entry.tripId);
@@ -90,7 +104,6 @@ class _MapScreenState extends State<MapScreen> {
     return _entries.map((entry) {
       final trip = _selectedTrip ?? _tripForEntry(entry);
       final color = trip != null ? _colorForEntry(entry, trip) : sectionColors[0];
-
       return Marker(
         point: LatLng(entry.latitude!, entry.longitude!),
         width: 16,
@@ -119,52 +132,38 @@ class _MapScreenState extends State<MapScreen> {
   void _showEntryPopup(Entry entry, Trip? trip) {
     showModalBottomSheet(
       context: context,
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                trip?.name ?? 'Unknown Trip',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                entry.date.toIso8601String().substring(0, 10),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(trip?.name ?? 'Unknown Trip', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 4),
+            Text(
+              entry.date.toIso8601String().substring(0, 10),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${_settings.getDistanceUnitLabel() == "km" ? "KM" : "Mile"} '
+              '${_settings.convertToDisplayUnit(entry.startMile).toStringAsFixed(1)} → '
+              '${_settings.convertToDisplayUnit(entry.endMile).toStringAsFixed(1)}',
+            ),
+            Text('Distance: ${_settings.formatDistance(entry.totalDistance)}'),
+            if (entry.notes.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                '${_settings.getDistanceUnitLabel() == "km" ? "KM" : "Mile"} '
-                '${_settings.convertToDisplayUnit(entry.startMile).toStringAsFixed(1)} → '
-                '${_settings.convertToDisplayUnit(entry.endMile).toStringAsFixed(1)}',
+                entry.notes,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.grey),
               ),
-              Text('Distance: ${_settings.formatDistance(entry.totalDistance)}'),
-              if (entry.notes.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  entry.notes,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
             ],
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
-  }
-
-  // Calculate map center from entries
-  LatLng _mapCenter() {
-    if (_entries.isEmpty) return const LatLng(37.0902, -95.7129); // US center fallback
-
-    final avgLat = _entries.map((e) => e.latitude!).reduce((a, b) => a + b) / _entries.length;
-    final avgLng = _entries.map((e) => e.longitude!).reduce((a, b) => a + b) / _entries.length;
-    return LatLng(avgLat, avgLng);
   }
 
   @override
@@ -173,7 +172,6 @@ class _MapScreenState extends State<MapScreen> {
       appBar: AppBar(title: const Text('Map')),
       body: Column(
         children: [
-          // Trip selector
           Padding(
             padding: const EdgeInsets.all(8),
             child: DropdownButtonFormField<int?>(
@@ -184,10 +182,7 @@ class _MapScreenState extends State<MapScreen> {
               ),
               value: _selectedTrip?.id,
               items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('All Hikes'),
-                ),
+                const DropdownMenuItem<int?>(value: null, child: Text('All Hikes')),
                 ..._trips.map((trip) => DropdownMenuItem<int?>(
                   value: trip.id,
                   child: Text(trip.name),
@@ -203,8 +198,6 @@ class _MapScreenState extends State<MapScreen> {
               },
             ),
           ),
-
-          // Map
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -225,9 +218,14 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       )
                     : FlutterMap(
+                        mapController: _mapController,
                         options: MapOptions(
-                          initialCenter: _mapCenter(),
-                          initialZoom: 7,
+                          initialCenter: const LatLng(37.0902, -95.7129),
+                          initialZoom: 4,
+                          onMapReady: () {
+                            _mapReady = true;
+                            _fitToEntries(_entries);
+                          },
                         ),
                         children: [
                           TileLayer(
