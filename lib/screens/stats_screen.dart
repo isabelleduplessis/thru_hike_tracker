@@ -10,6 +10,7 @@ import '../repositories/custom_field_repository.dart';
 import '../services/settings_service.dart';
 import '../models/section.dart';
 import '../utils/section_colors.dart';
+import '../utils/day_number.dart';
 
 
 class StatsScreen extends StatefulWidget {
@@ -215,7 +216,8 @@ class _StatsScreenState extends State<StatsScreen> {
                     const SizedBox(height: 24),
                     _buildDonutChart(_allTrips, _allTripMiles),
                   ],
-                  if (_selectedTrip != null && _chartEntries.length > 1) ...[
+                  if (_selectedTrip != null && _filteredChartEntries.map((e) => e.date.toIso8601String().substring(0, 10)).toSet().length > 1) ...[
+                    // if (_filteredChartEntries.map((e) => e.date.toIso8601String().substring(0, 10)).toSet().length > 1)
                     _buildChartSection(),
                     const SizedBox(height: 24),
                   ],
@@ -636,34 +638,56 @@ class _StatsScreenState extends State<StatsScreen> {
     }
     final sortedDays = dailyMiles.keys.toList()..sort();
 
-    final spots = sortedDays.asMap().entries.map((e) {
+    final dayNums = calculateDayNumbers(
+      _filteredChartEntries,
+      _selectedTrip!.startDate,
+    );
+
+    // Build a map of dateStr -> dayNumber
+    final dateToDayNum = <String, int>{};
+    for (final entry in _filteredChartEntries) {
+      final dateStr = entry.date.toIso8601String().substring(0, 10);
+      dateToDayNum[dateStr] = dayNums[entry.id!]!;
+    }
+
+    final spots = sortedDays.map((day) {
       return FlSpot(
-        (e.key + 1).toDouble(),
-        _settings.convertToDisplayUnit(dailyMiles[e.value]!),
+        dateToDayNum[day]!.toDouble(),
+        _settings.convertToDisplayUnit(dailyMiles[day]!),
       );
     }).toList();
 
-    final maxDay = sortedDays.length.toDouble();
+    final allDayNums = dateToDayNum.values.toList()..sort();
+    final totalDays = allDayNums.length;
+    final lastDay = allDayNums.last;
+    final firstDay = allDayNums.first;
+
+    // Step based on total days — used for both grid and labels
+    final step = totalDays <= 10 ? 1
+        : totalDays <= 30 ? 5
+        : totalDays <= 100 ? 10
+        : 20;
+
     final maxMiles = dailyMiles.isEmpty
         ? 25.0
         : dailyMiles.values.reduce((a, b) => a > b ? a : b);
     final maxInDisplayUnit = _settings.convertToDisplayUnit(maxMiles);
     final yMax = ((maxInDisplayUnit / 5).ceil() * 5).toDouble();
-
-    final xInterval = maxDay <= 10 ? 1.0 : (maxDay / 10).ceilToDouble();
     final yInterval = yMax <= 25 ? 5.0 : (yMax / 5).ceilToDouble();
+
+    final xGridInterval = step.toDouble();
 
     return LineChart(
       LineChartData(
-        minX: 1,
-        maxX: maxDay > 0 ? maxDay : 10,
+        minX: firstDay.toDouble(),
+        maxX: lastDay.toDouble(),
         minY: 0,
         maxY: yMax > 0 ? yMax : 25,
         gridData: FlGridData(
           show: true,
           drawVerticalLine: true,
           horizontalInterval: yInterval,
-          verticalInterval: xInterval,
+          verticalInterval: xGridInterval,
           getDrawingHorizontalLine: (value) => FlLine(
             color: Colors.grey.withOpacity(0.2),
             strokeWidth: 1,
@@ -688,17 +712,12 @@ class _StatsScreenState extends State<StatsScreen> {
             ),
             sideTitles: SideTitles(
               showTitles: true,
-              interval: xInterval,
+              interval: xGridInterval,
               reservedSize: 30,
               getTitlesWidget: (value, meta) {
-                if (value % 1 != 0) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 0),
-                  child: Text(
-                    value.toInt().toString(),
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                );
+                final dayNum = value.toInt();
+                if (dayNum % step != 0) return const SizedBox.shrink();
+                return Text(dayNum.toString(), style: const TextStyle(fontSize: 10));
               },
             ),
           ),
@@ -750,17 +769,20 @@ class _StatsScreenState extends State<StatsScreen> {
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
-                final index = spot.x.toInt() - 1;
-                if (index >= 0 && index < sortedDays.length) {
-                  final date = DateTime.parse(sortedDays[index]);
-                  final miles = dailyMiles[sortedDays[index]]!;
-                  final dateFormat = DateFormat('M/d');
-                  return LineTooltipItem(
-                    'Day ${spot.x.toInt()}\n${_settings.formatDistance(miles)}\n${dateFormat.format(date)}',
-                    const TextStyle(color: Colors.white, fontSize: 12),
-                  );
-                }
-                return null;
+                final dayNum = spot.x.toInt();
+                final dateStr = dateToDayNum.entries
+                    .firstWhere((e) => e.value == dayNum,
+                        orElse: () => const MapEntry('', 0))
+                    .key;
+                if (dateStr.isEmpty) return null;
+                final miles = dailyMiles[dateStr];
+                if (miles == null) return null;
+                final date = DateTime.parse(dateStr);
+                final dateFormat = DateFormat('M/d');
+                return LineTooltipItem(
+                  'Day $dayNum\n${_settings.formatDistance(miles)}\n${dateFormat.format(date)}',
+                  const TextStyle(color: Colors.white, fontSize: 12),
+                );
               }).toList();
             },
           ),

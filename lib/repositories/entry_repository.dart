@@ -1,7 +1,7 @@
 // repositories/entry_repository.dart
 // Handles all database operations for Entries
 
-import 'package:sqflite/sqflite.dart';
+// import 'package:sqflite/sqflite.dart';
 import '../database/database_helper.dart';
 import '../models/entry.dart';
 
@@ -359,6 +359,16 @@ class EntryRepository {
     );
     if (result.isEmpty) return null;
     return (result.first['end_mile'] as num).toDouble();
+  }
+
+  Future<DateTime?> getLastEntryDateForTrip(int tripId) async {
+    final db = await _dbHelper.database;
+    final result = await db.rawQuery(
+      'SELECT MAX(date) as last_date FROM entries WHERE trip_id = ?',
+      [tripId],
+    );
+    if (result.isEmpty || result.first['last_date'] == null) return null;
+    return DateTime.parse(result.first['last_date'] as String);
   }
 
 }

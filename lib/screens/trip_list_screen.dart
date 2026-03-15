@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/trip.dart';
 import '../repositories/trip_repository.dart';
+import '../repositories/entry_repository.dart';
 import 'trip_detail_screen.dart';
 import 'trip_form_screen.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/import_service.dart';
+import '../services/export_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 class TripListScreen extends StatefulWidget {
@@ -22,10 +24,13 @@ class TripListScreen extends StatefulWidget {
 
 class _TripListScreenState extends State<TripListScreen> {
   final TripRepository _tripRepository = TripRepository();
+  final EntryRepository _entryRepository = EntryRepository();
   List<Trip> _trips = [];
   bool _isLoading = true;
   final ImportService _importService = ImportService();
   bool _isImporting = false;
+  final ExportService _exportService = ExportService();
+  Map<int, DateTime?> _latestEntryDates = {};
 
   @override
   void initState() {
@@ -40,8 +45,13 @@ class _TripListScreenState extends State<TripListScreen> {
     
     final trips = await _tripRepository.getAllTrips();
     
+    final latestDates = <int, DateTime?>{};
+    for (final trip in trips) {
+      latestDates[trip.id!] = await _entryRepository.getLastEntryDateForTrip(trip.id!);
+    }
     setState(() {
       _trips = trips;
+      _latestEntryDates = latestDates;
       _isLoading = false;
     });
   }
@@ -62,12 +72,17 @@ class _TripListScreenState extends State<TripListScreen> {
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
                 if (value == 'import') _importCsv();
+                if (value == 'export') _exportTrip();
                 if (value == 'template') _downloadTemplate();
               },
               itemBuilder: (context) => [
                 const PopupMenuItem(
                   value: 'import',
                   child: Row(children: [Icon(Icons.upload_file), SizedBox(width: 12), Text('Import from CSV')]),
+                ),
+                const PopupMenuItem(
+                  value: 'export',
+                  child: Row(children: [Icon(Icons.download), SizedBox(width: 12), Text('Export to CSV')]),
                 ),
                 const PopupMenuItem(
                   value: 'template',
@@ -144,16 +159,17 @@ class _TripListScreenState extends State<TripListScreen> {
 
   Widget _buildTripCard(Trip trip) {
     // Format dates
-    final dateFormat = DateFormat('MMM yyyy');
+    final dateFormat = DateFormat('MMM d, yyyy');
     final startStr = dateFormat.format(trip.startDate);
-    final endStr = trip.endDate != null 
-        ? dateFormat.format(trip.endDate!)
-        : 'Current'; // ID edit
+    final latestDate = _latestEntryDates[trip.id];
+    final endStr = latestDate != null
+        ? dateFormat.format(latestDate)
+        : trip.endDate != null
+            ? dateFormat.format(trip.endDate!)
+            : dateFormat.format(trip.startDate);
     
     // Show date range only if spans multiple months
-    final dateDisplay = _spansMultipleMonths(trip.startDate, trip.endDate)
-        ? '$startStr - $endStr'
-        : startStr;
+    final dateDisplay = '$startStr - $endStr';
     
     // Status badge color
     final statusColor = _getStatusColor(trip.status);
@@ -301,8 +317,24 @@ class _TripListScreenState extends State<TripListScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not share template: $e')),
+        SnackBar(content: Text('Could not export template: $e')),
       );
     }
+  }
+
+  Future<void> _exportTrip() async {
+    if (_trips.isEmpty) return;
+    final trip = await showDialog<Trip>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Select hike to export'),
+        children: _trips.map((t) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, t),
+          child: Text(t.name),
+        )).toList(),
+      ),
+    );
+    if (trip == null) return;
+    await _exportService.exportTripToCsv(trip);
   }
 }

@@ -1,14 +1,12 @@
-import 'package:sqflite/sqflite.dart';
+// custom_field_repository.dart
+// import 'package:sqflite/sqflite.dart';
 import '../database/database_helper.dart';
 import '../models/custom_field.dart';
 
 class CustomFieldRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
-
-
   // now we add methods
-  // ==================== CUSTOM FIELDS ====================
-  // Create a new custom field
+
   Future<CustomField> createCustomField(CustomField field) async {
     final db = await _dbHelper.database;
     final id = await db.insert('custom_fields', field.toMap());

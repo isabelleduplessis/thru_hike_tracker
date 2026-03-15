@@ -5,44 +5,38 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DatabaseHelper {
-  // Singleton pattern - only one instance of DatabaseHelper exists
-  // This ensures we don't create multiple database connections
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
   
-  DatabaseHelper._init(); // Private constructor
+  DatabaseHelper._init();
   
-  // Get the database, creating it if it doesn't exist
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('thru_hike_tracker.db');
     return _database!;
   }
   
-  // Initialize the database file
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
+      onOpen: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
     );
   }
 
-  
-
-  // Add this method after _createDB
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Add direction column to existing entries table
       await db.execute('ALTER TABLE entries ADD COLUMN direction INTEGER');
     }
     
     if (oldVersion < 3) {
-      // Add custom fields tables
       await db.execute('''
         CREATE TABLE custom_fields (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,13 +69,11 @@ class DatabaseHelper {
     }
     
     if (oldVersion < 4) {
-      // Add trip_length and end_mile columns
       await db.execute('ALTER TABLE trips ADD COLUMN trip_length REAL NOT NULL DEFAULT 0.0');
       await db.execute('ALTER TABLE trips ADD COLUMN end_mile REAL NOT NULL DEFAULT 0.0');
     }
     
     if (oldVersion < 5) {
-      // Drop all tables and recreate fresh
       await db.execute('DROP TABLE IF EXISTS custom_field_values');
       await db.execute('DROP TABLE IF EXISTS trip_custom_fields');
       await db.execute('DROP TABLE IF EXISTS custom_fields');
@@ -89,17 +81,13 @@ class DatabaseHelper {
       await db.execute('DROP TABLE IF EXISTS gear');
       await db.execute('DROP TABLE IF EXISTS entries');
       await db.execute('DROP TABLE IF EXISTS trips');
-      
-      // Recreate everything
       await _createDB(db, 5);
     }
     
     if (oldVersion < 8) {
-      // Recreate gear table with new schema (start_date and end_date)
       await db.execute('DROP TABLE IF EXISTS entry_gear');
       await db.execute('DROP TABLE IF EXISTS gear');
       
-      // Recreate gear table
       await db.execute('''
         CREATE TABLE gear (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,7 +98,6 @@ class DatabaseHelper {
         )
       ''');
       
-      // Recreate junction table
       await db.execute('''
         CREATE TABLE entry_gear (
           entry_id INTEGER NOT NULL,
@@ -123,10 +110,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 9) {
-      // 1. Add direction column to trips
       await db.execute('ALTER TABLE trips ADD COLUMN direction INTEGER');
       
-      // 2. Create the sections table
       await db.execute('''
         CREATE TABLE sections (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,35 +123,41 @@ class DatabaseHelper {
         )
       ''');
       
-      // 3. Create index for faster section lookups
       await db.execute('CREATE INDEX idx_sections_trip_id ON sections (trip_id)');
     }
+
     if (oldVersion < 10) {
       await db.execute('ALTER TABLE entries ADD COLUMN latitude REAL');
       await db.execute('ALTER TABLE entries ADD COLUMN longitude REAL');
     }
 
     if (oldVersion < 11) {
-      // Optional field flags on trips
       await db.execute('ALTER TABLE trips ADD COLUMN track_coordinates INTEGER NOT NULL DEFAULT 0');
       await db.execute('ALTER TABLE trips ADD COLUMN track_shower INTEGER NOT NULL DEFAULT 0');
       await db.execute('ALTER TABLE trips ADD COLUMN track_elevation INTEGER NOT NULL DEFAULT 0');
       await db.execute('ALTER TABLE trips ADD COLUMN track_sleeping INTEGER NOT NULL DEFAULT 0');
-      
-      // Nero threshold
       await db.execute('ALTER TABLE trips ADD COLUMN nero_threshold REAL');
-      
-      // Elevation columns on entries
       await db.execute('ALTER TABLE entries ADD COLUMN elevation_gain REAL');
       await db.execute('ALTER TABLE entries ADD COLUMN elevation_loss REAL');
     }
+
+    if (oldVersion < 12) {
+      // Drop everything and recreate fresh with foreign_keys properly enforced
+      await db.execute('DROP TABLE IF EXISTS custom_field_values');
+      await db.execute('DROP TABLE IF EXISTS trip_custom_fields');
+      await db.execute('DROP TABLE IF EXISTS custom_fields');
+      await db.execute('DROP TABLE IF EXISTS entry_gear');
+      await db.execute('DROP TABLE IF EXISTS gear');
+      await db.execute('DROP TABLE IF EXISTS sections');
+      await db.execute('DROP TABLE IF EXISTS entries');
+      await db.execute('DROP TABLE IF EXISTS trips');
+      await _createDB(db, 12);
+    }
   }
 
-
-
-  // Create all tables - runs only on first install
   Future _createDB(Database db, int version) async {
-    // TRIPS TABLE (Added direction)
+    await db.execute('PRAGMA foreign_keys = ON');
+
     await db.execute('''
       CREATE TABLE trips (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,11 +173,10 @@ class DatabaseHelper {
         track_shower INTEGER NOT NULL DEFAULT 0,
         track_elevation INTEGER NOT NULL DEFAULT 0,
         track_sleeping INTEGER NOT NULL DEFAULT 0,
-        nero_threshold REAL,
+        nero_threshold REAL
       )
     ''');
 
-    // SECTIONS TABLE (New table)
     await db.execute('''
       CREATE TABLE sections (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -198,7 +188,6 @@ class DatabaseHelper {
       )
     ''');
     
-    // ENTRIES TABLE
     await db.execute('''
       CREATE TABLE entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,7 +210,6 @@ class DatabaseHelper {
       )
     ''');
     
-    // GEAR TABLE
     await db.execute('''
       CREATE TABLE gear (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -232,8 +220,6 @@ class DatabaseHelper {
       )
     ''');
     
-    // ENTRY_GEAR TABLE (many-to-many relationship)
-    // Links entries to gear used on that day
     await db.execute('''
       CREATE TABLE entry_gear (
         entry_id INTEGER NOT NULL,
@@ -244,7 +230,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // CUSTOM FIELDS TABLE
     await db.execute('''
       CREATE TABLE custom_fields (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -253,7 +238,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // TRIP_CUSTOM_FIELDS TABLE (many-to-many: trips <-> custom_fields)
     await db.execute('''
       CREATE TABLE trip_custom_fields (
         trip_id INTEGER NOT NULL,
@@ -265,7 +249,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // CUSTOM FIELD VALUES TABLE (stores actual entry values)
     await db.execute('''
       CREATE TABLE custom_field_values (
         entry_id INTEGER NOT NULL,
@@ -277,15 +260,13 @@ class DatabaseHelper {
       )
     ''');
     
-    // Create indexes for faster queries
-    // Index on foreign keys speeds up JOIN operations
     await db.execute('CREATE INDEX idx_entries_trip_id ON entries (trip_id)');
     await db.execute('CREATE INDEX idx_entries_date ON entries (date)');
     await db.execute('CREATE INDEX idx_entry_gear_entry ON entry_gear (entry_id)');
     await db.execute('CREATE INDEX idx_entry_gear_gear ON entry_gear (gear_id)');
     await db.execute('CREATE INDEX idx_sections_trip_id ON sections (trip_id)');
   }
-  // Close the database
+
   Future close() async {
     final db = await instance.database;
     db.close();

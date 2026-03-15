@@ -16,6 +16,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../services/settings_service.dart';
 import '../repositories/trip_repository.dart';
 import '../utils/section_colors.dart';
+import '../utils/day_number.dart';
 
 
 class TripDetailScreen extends StatefulWidget {
@@ -87,7 +88,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       _entries = entries;
       _isLoading = false;
       _groupEntriesByDate();
-      _entryDayNumbers = _calculateDayNumbers();
+      _entryDayNumbers = calculateDayNumbers(_entries, _currentTrip.startDate);
     });
   }
   void _groupEntriesByDate() {
@@ -100,23 +101,23 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       _entriesByDate[dateKey]!.add(entry);
     }
   }
-  Map<int, int> _calculateDayNumbers() {
-    // Get sorted unique dates
-    final uniqueDates = _entries
-        .map((e) => DateTime(e.date.year, e.date.month, e.date.day))
-        .toSet()
-        .toList()
-      ..sort();
+  // Map<int, int> _calculateDayNumbers() {
+  //   // Get sorted unique dates
+  //   final uniqueDates = _entries
+  //       .map((e) => DateTime(e.date.year, e.date.month, e.date.day))
+  //       .toSet()
+  //       .toList()
+  //     ..sort();
 
-    // Map each entry to the rank of its date
-    final dayNumbers = <int, int>{};
-    for (final entry in _entries) {
-      final dateKey = DateTime(entry.date.year, entry.date.month, entry.date.day);
-      dayNumbers[entry.id!] = uniqueDates.indexOf(dateKey) + 1;
-    }
+  //   // Map each entry to the rank of its date
+  //   final dayNumbers = <int, int>{};
+  //   for (final entry in _entries) {
+  //     final dateKey = DateTime(entry.date.year, entry.date.month, entry.date.day);
+  //     dayNumbers[entry.id!] = uniqueDates.indexOf(dateKey) + 1;
+  //   }
 
-    return dayNumbers;
-  }
+  //   return dayNumbers;
+  // }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
