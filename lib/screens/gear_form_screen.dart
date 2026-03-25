@@ -4,10 +4,11 @@
 import 'package:flutter/material.dart';
 import '../models/gear.dart';
 import '../repositories/gear_repository.dart';
+import 'gear_entry_assign_screen.dart';
 import 'package:intl/intl.dart';
 
 class GearFormScreen extends StatefulWidget {
-  final Gear? gear;  // null = creating new, not null = editing
+  final Gear? gear;
   
   const GearFormScreen({Key? key, this.gear}) : super(key: key);
 
@@ -19,7 +20,6 @@ class _GearFormScreenState extends State<GearFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final GearRepository _gearRepository = GearRepository();
   
-  // Controllers for text inputs
   final _nameController = TextEditingController();
   final _categoryController = TextEditingController();
   DateTime _startDate = DateTime.now();
@@ -27,7 +27,6 @@ class _GearFormScreenState extends State<GearFormScreen> {
   bool _isRetired = false;
   DateTime? _lastUsedDate;
   bool _isLoadingLastUse = false;
-  
   bool _isSaving = false;
 
   @override
@@ -46,13 +45,8 @@ class _GearFormScreenState extends State<GearFormScreen> {
 
   Future<void> _loadLastUsedDate() async {
     if (widget.gear?.id == null) return;
-    
-    setState(() {
-      _isLoadingLastUse = true;
-    });
-    
+    setState(() => _isLoadingLastUse = true);
     final lastDate = await _gearRepository.getLastUsedDate(widget.gear!.id!);
-    
     setState(() {
       _lastUsedDate = lastDate;
       _isLoadingLastUse = false;
@@ -67,11 +61,8 @@ class _GearFormScreenState extends State<GearFormScreen> {
   }
 
   Future<void> _saveGear() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    // Validate end date isn't before last use
     if (_isRetired && _endDate != null && _lastUsedDate != null) {
       if (_endDate!.isBefore(_lastUsedDate!)) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -86,19 +77,17 @@ class _GearFormScreenState extends State<GearFormScreen> {
       }
     }
     
-    setState(() {
-      _isSaving = true;
-    });
+    setState(() => _isSaving = true);
     
     try {
       final gear = Gear(
         id: widget.gear?.id,
         name: _nameController.text.trim(),
-        category: _categoryController.text.trim().isEmpty 
-            ? null 
+        category: _categoryController.text.trim().isEmpty
+            ? null
             : _categoryController.text.trim(),
         startDate: _startDate,
-        endDate: _isRetired ? _endDate ?? DateTime.now() : null, // what does the datetime.now() do? 
+        endDate: _isRetired ? _endDate ?? DateTime.now() : null,
       );
       
       if (widget.gear == null) {
@@ -107,9 +96,7 @@ class _GearFormScreenState extends State<GearFormScreen> {
         await _gearRepository.updateGear(gear);
       }
       
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -117,11 +104,7 @@ class _GearFormScreenState extends State<GearFormScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -150,9 +133,7 @@ class _GearFormScreenState extends State<GearFormScreen> {
     if (confirmed == true && mounted) {
       try {
         await _gearRepository.deleteGear(widget.gear!.id!);
-        if (mounted) {
-          Navigator.pop(context, 'deleted');
-        }
+        if (mounted) Navigator.pop(context, 'deleted');
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -194,9 +175,7 @@ class _GearFormScreenState extends State<GearFormScreen> {
               ),
               textCapitalization: TextCapitalization.words,
               validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a name';
-                }
+                if (value == null || value.trim().isEmpty) return 'Please enter a name';
                 return null;
               },
             ),
@@ -215,7 +194,6 @@ class _GearFormScreenState extends State<GearFormScreen> {
             
             const SizedBox(height: 16),
 
-            // Start Date
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Start Date'),
@@ -231,17 +209,12 @@ class _GearFormScreenState extends State<GearFormScreen> {
                   firstDate: DateTime(2000),
                   lastDate: DateTime.now().add(const Duration(days: 365)),
                 );
-                if (picked != null) {
-                  setState(() {
-                    _startDate = picked;
-                  });
-                }
+                if (picked != null) setState(() => _startDate = picked);
               },
             ),
 
             const Divider(),
 
-            // Status Toggle
             Row(
               children: [
                 const Text('Status:', style: TextStyle(fontSize: 16)),
@@ -270,7 +243,6 @@ class _GearFormScreenState extends State<GearFormScreen> {
               ],
             ),
 
-            // End Date (only if retired)
             if (_isRetired) ...[
               const SizedBox(height: 8),
               ListTile(
@@ -285,15 +257,14 @@ class _GearFormScreenState extends State<GearFormScreen> {
                           : 'Not set',
                       style: const TextStyle(fontSize: 16),
                     ),
-                    if (_lastUsedDate != null)
+                    if (_isLoadingLastUse)
+                      const Text('Loading last use', style: TextStyle(fontSize: 12, color: Colors.grey))
+                    else if (_lastUsedDate != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
                           'Last used: ${DateFormat('MMM dd, yyyy').format(_lastUsedDate!)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                         ),
                       ),
                   ],
@@ -303,24 +274,34 @@ class _GearFormScreenState extends State<GearFormScreen> {
                   final picked = await showDatePicker(
                     context: context,
                     initialDate: _endDate ?? (_lastUsedDate ?? DateTime.now()),
-                    firstDate: _lastUsedDate ?? _startDate,  // ← Can't be before last use
+                    firstDate: _lastUsedDate ?? _startDate,
                     lastDate: DateTime.now().add(const Duration(days: 365)),
-                    helpText: _lastUsedDate != null
-                        ? 'Must be on or after last use'
-                        : null,
+                    helpText: _lastUsedDate != null ? 'Must be on or after last use' : null,
                   );
-                  if (picked != null) {
-                    setState(() {
-                      _endDate = picked;
-                    });
-                  }
+                  if (picked != null) setState(() => _endDate = picked);
                 },
               ),
             ],
 
             const Divider(),
+            const SizedBox(height: 16),
 
-            const SizedBox(height: 24),
+            // ── Assign to Entries (editing only) ──────────────────────
+            if (isEditing) ...[
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => GearEntryAssignScreen(gear: widget.gear!),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.checklist),
+                label: const Text('Assign to Entries'),
+              ),
+              const SizedBox(height: 12),
+            ],
             
             FilledButton(
               onPressed: _isSaving ? null : _saveGear,

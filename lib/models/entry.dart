@@ -1,27 +1,25 @@
 // models/entry.dart
-// Represents a single day's hiking entry
 import 'direction.dart';
-
-
 
 class Entry {
   final int? id;
-  final int tripId; // Foreign key - which trip does this entry belong to?
+  final int tripId;
   final DateTime date;
   final double startMile;
   final double endMile;
-  final double extraMiles; // Side trails, detours, etc.
-  final double skippedMiles; // Sections skipped (hitchhiked, etc.)
-  final String? location; // Campsite name, town, etc. (optional)
-  final bool? tentOrShelter; // true = tent, false = shelter, null = not specified
-  final bool? shower; // Did they shower today?
+  final double extraMiles;
+  final double skippedMiles;
+  final String? location;
+  final bool? tentOrShelter;
+  final bool? shower;
   final String notes;
   final Direction? direction;
   final double? latitude;
   final double? longitude;
   final double? elevationGain;
   final double? elevationLoss;
-  
+  final int? alternateId; // null = regular entry, set = on an alternate route
+
   Entry({
     this.id,
     required this.tripId,
@@ -38,16 +36,17 @@ class Entry {
     this.latitude,
     this.longitude,
     this.elevationGain,
-  this.elevationLoss,
+    this.elevationLoss,
+    this.alternateId,
   });
-  
-  // Calculated property - net distance from start to end
+
+  // When on an alternate, start/end mile are in alternate miles
+  // so netDistance is still just abs(end - start)
   double get netDistance => (endMile - startMile).abs();
-  
-  // Calculated property - total distance including adjustments
-  // This is what gets added to stats and gear mileage
   double get totalDistance => netDistance + extraMiles - skippedMiles;
-  
+
+  bool get isOnAlternate => alternateId != null;
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -66,9 +65,10 @@ class Entry {
       'longitude': longitude,
       'elevation_gain': elevationGain,
       'elevation_loss': elevationLoss,
+      'alternate_id': alternateId,
     };
   }
-  
+
   factory Entry.fromMap(Map<String, dynamic> map) {
     return Entry(
       id: map['id'] as int?,
@@ -79,23 +79,24 @@ class Entry {
       extraMiles: (map['extra_miles'] as num?)?.toDouble() ?? 0.0,
       skippedMiles: (map['skipped_miles'] as num?)?.toDouble() ?? 0.0,
       location: map['location'] as String?,
-      tentOrShelter: map['tent_or_shelter'] != null 
+      tentOrShelter: map['tent_or_shelter'] != null
           ? (map['tent_or_shelter'] as int) == 1
           : null,
-      shower: map['shower'] != null 
+      shower: map['shower'] != null
           ? (map['shower'] as int) == 1
           : null,
       notes: map['notes'] as String? ?? '',
-      direction: map['direction'] != null  // ← ADD THESE LINES
-        ? Direction.values[map['direction'] as int]
-        : null,
+      direction: map['direction'] != null
+          ? Direction.values[map['direction'] as int]
+          : null,
       latitude: map['latitude'] as double?,
       longitude: map['longitude'] as double?,
       elevationGain: map['elevation_gain'] as double?,
       elevationLoss: map['elevation_loss'] as double?,
+      alternateId: map['alternate_id'] as int?,
     );
   }
-  
+
   Entry copyWith({
     int? id,
     int? tripId,
@@ -110,9 +111,10 @@ class Entry {
     String? notes,
     Direction? direction,
     double? latitude,
-    double? longitude,  
+    double? longitude,
     double? elevationGain,
     double? elevationLoss,
+    int? alternateId,
   }) {
     return Entry(
       id: id ?? this.id,
@@ -131,6 +133,7 @@ class Entry {
       longitude: longitude ?? this.longitude,
       elevationGain: elevationGain ?? this.elevationGain,
       elevationLoss: elevationLoss ?? this.elevationLoss,
+      alternateId: alternateId ?? this.alternateId,
     );
   }
 }

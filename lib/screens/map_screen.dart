@@ -9,6 +9,8 @@ import '../utils/section_colors.dart';
 import '../services/settings_service.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../utils/day_number.dart';
+import '../utils/entry_detail_dialog.dart';
+import '../repositories/custom_field_repository.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({Key? key}) : super(key: key);
@@ -150,63 +152,15 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _showEntryPopup(Entry entry, Trip? trip) {
-    final dayNumber = _dayNumbers[entry.id];
-    showDialog(
+    if (trip == null) return;
+    showEntryDetailDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      trip!.name,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              if (dayNumber != null)
-                Text(
-                  'Day $dayNumber',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              Text(
-                entry.date.toIso8601String().substring(0, 10),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${_settings.getDistanceUnitLabel() == "km" ? "KM" : "Mile"} '
-                '${_settings.convertToDisplayUnit(entry.startMile).toStringAsFixed(1)} → '
-                '${_settings.convertToDisplayUnit(entry.endMile).toStringAsFixed(1)}',
-              ),
-              Text('Distance: ${_settings.formatDistance(entry.totalDistance)}'),
-              if (entry.notes.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  entry.notes,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+      entry: entry,
+      trip: trip,
+      dayNumber: null, // map doesn't calculate day numbers
+      settings: _settings,
+      customFieldRepository: CustomFieldRepository(),
+      allEntries: null, // no arrows on map
     );
   }
 

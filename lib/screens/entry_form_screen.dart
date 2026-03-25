@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/trip.dart';
 import '../models/entry.dart';
+import '../models/section.dart';
 import '../repositories/entry_repository.dart';
+import '../repositories/trip_repository.dart';
 import '../models/gear.dart';
 import '../repositories/gear_repository.dart';
 import '../models/custom_field.dart';
@@ -29,12 +31,15 @@ class EntryFormScreen extends StatefulWidget {
 class _EntryFormScreenState extends State<EntryFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final EntryRepository _entryRepository = EntryRepository();
+  final TripRepository _tripRepository = TripRepository();
   final GearRepository _gearRepository = GearRepository();
   final CustomFieldRepository _customFieldRepository = CustomFieldRepository();
   final _settings = SettingsService();
 
   List<Gear> _availableGear = [];
   List<int> _selectedGearIds = [];
+  List<Alternate> _availableAlternates = [];
+  int? _selectedAlternateId;
 
   final _startMileController = TextEditingController();
   final _endMileController = TextEditingController();
@@ -61,6 +66,8 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   double? _longitude;
   bool _isFetchingLocation = false;
 
+  bool get _isOnAlternate => _selectedAlternateId != null;
+
   InputDecoration _slimDecoration(String label, {String? suffixText}) {
     return InputDecoration(
       labelText: label,
@@ -71,12 +78,9 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     );
   }
 
-  // Only removes the divider line, keeps natural highlight
   Theme _quietExpansion({required Widget child}) {
     return Theme(
-      data: Theme.of(context).copyWith(
-        dividerColor: Colors.transparent,
-      ),
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: child,
     );
   }
@@ -86,6 +90,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     super.initState();
     _loadGear();
     _loadCustomFields();
+    _loadAlternates();
 
     if (widget.entry != null) {
       final entry = widget.entry!;
@@ -97,7 +102,12 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       _hadShower = entry.shower ?? false;
       _latitude = entry.latitude;
       _longitude = entry.longitude;
-      _sectionController.text = _determineSection(entry.endMile);
+      _selectedAlternateId = entry.alternateId;
+
+      // Only determine section if not on an alternate
+      if (entry.alternateId == null) {
+        _sectionController.text = _determineSection(entry.endMile);
+      }
 
       _startMileController.text = _settings.convertToDisplayUnit(entry.startMile).toStringAsFixed(2);
       _endMileController.text = _settings.convertToDisplayUnit(entry.endMile).toStringAsFixed(2);
@@ -117,6 +127,22 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       _selectedDirection = widget.trip.direction;
       _loadNewEntryDefaults();
     }
+  }
+
+  Future<void> _loadAlternates() async {
+    final alternates = await _tripRepository.getIncompleteAlternatesForTrip(widget.trip.id!);
+
+    // If editing an entry that's on a completed alternate, include that alternate too
+    if (widget.entry?.alternateId != null) {
+      final alreadyIncluded = alternates.any((a) => a.id == widget.entry!.alternateId);
+      if (!alreadyIncluded) {
+        final allAlternates = widget.trip.alternates;
+        final current = allAlternates.where((a) => a.id == widget.entry!.alternateId).toList();
+        alternates.addAll(current);
+      }
+    }
+
+    if (mounted) setState(() => _availableAlternates = alternates);
   }
 
   Future<void> _loadNewEntryDefaults() async {
@@ -266,8 +292,9 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
         date: _selectedDate,
         startMile: _settings.convertFromDisplayUnit(double.parse(_startMileController.text)),
         endMile: _settings.convertFromDisplayUnit(double.parse(_endMileController.text)),
-        extraMiles: _settings.convertFromDisplayUnit(double.tryParse(_extraMilesController.text) ?? 0.0),
-        skippedMiles: _settings.convertFromDisplayUnit(double.tryParse(_skippedMilesController.text) ?? 0.0),
+        // Force 0 for extra/skipped when on alternate
+        extraMiles: _isOnAlternate ? 0.0 : _settings.convertFromDisplayUnit(double.tryParse(_extraMilesController.text) ?? 0.0),
+        skippedMiles: _isOnAlternate ? 0.0 : _settings.convertFromDisplayUnit(double.tryParse(_skippedMilesController.text) ?? 0.0),
         elevationGain: _elevationGainController.text.isNotEmpty
             ? _settings.convertFromDisplayElevation(double.parse(_elevationGainController.text))
             : null,
@@ -281,6 +308,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
         direction: _selectedDirection,
         latitude: _latitude,
         longitude: _longitude,
+        alternateId: _selectedAlternateId,
       );
 
       Entry savedEntry;
@@ -419,7 +447,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                     onChanged: (value) => setState(() => _selectedDirection = value),
                   ),
                 ),
-                if (widget.trip.sections.isNotEmpty) ...[
+                if (widget.trip.sections.isNotEmpty && !_isOnAlternate) ...[
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextFormField(
@@ -440,6 +468,36 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
             ),
             const SizedBox(height: 10),
 
+            // ── Alternate Route selector ───────────────────────────────
+            if (_availableAlternates.isNotEmpty) ...[
+              DropdownButtonFormField<int?>(
+                decoration: _slimDecoration('Alternate Route'),
+                value: _selectedAlternateId,
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('None'),
+                  ),
+                  ..._availableAlternates.map((alt) => DropdownMenuItem<int?>(
+                    value: alt.id,
+                    child: Text(alt.name),
+                  )),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedAlternateId = value;
+                    // Clear section when switching to alternate
+                    if (value != null) {
+                      _sectionController.text = '';
+                      _startMileController.text = '0.00';
+                      _endMileController.text = '0.00';
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+
             // ── Start / End mile ──────────────────────────────────────
             Row(
               children: [
@@ -447,7 +505,9 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                   child: TextFormField(
                     controller: _startMileController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _slimDecoration('Start $unit'),
+                    decoration: _slimDecoration(
+                      _isOnAlternate ? 'Alternate Start' : 'Start $unit',
+                    ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Required';
                       if (double.tryParse(v) == null) return 'Invalid';
@@ -460,12 +520,16 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                   child: TextFormField(
                     controller: _endMileController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _slimDecoration('End $unit'),
+                    decoration: _slimDecoration(
+                      _isOnAlternate ? 'Alternate End' : 'End $unit',
+                    ),
                     onChanged: (value) {
-                      final inputMile = double.tryParse(value);
-                      if (inputMile != null) {
-                        final baseMile = _settings.convertFromDisplayUnit(inputMile);
-                        setState(() => _sectionController.text = _determineSection(baseMile));
+                      if (!_isOnAlternate) {
+                        final inputMile = double.tryParse(value);
+                        if (inputMile != null) {
+                          final baseMile = _settings.convertFromDisplayUnit(inputMile);
+                          setState(() => _sectionController.text = _determineSection(baseMile));
+                        }
                       }
                     },
                     validator: (v) {
@@ -483,31 +547,34 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
             _quietExpansion(
               child: ExpansionTile(
                 tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                title: const Text('More', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                title: const Text('Advanced', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                 childrenPadding: const EdgeInsets.only(bottom: 8),
                 children: [
                   const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _extraMilesController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: _slimDecoration('+ Distance', suffixText: distUnit),
+                  // Hide +/- distance when on alternate
+                  if (!_isOnAlternate) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _extraMilesController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _slimDecoration('+ Distance', suffixText: distUnit),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _skippedMilesController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: _slimDecoration('- Distance', suffixText: distUnit),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _skippedMilesController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _slimDecoration('- Distance', suffixText: distUnit),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  if (widget.trip.trackElevation) ...[
+                      ],
+                    ),
                     const SizedBox(height: 10),
+                  ],
+                  if (widget.trip.trackElevation) ...[
                     Row(
                       children: [
                         Expanded(
@@ -527,18 +594,19 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 10),
                   ],
                   if (widget.trip.trackCoordinates) ...[
-                    const SizedBox(height: 10),
                     _buildCoordinatesRow(),
+                    const SizedBox(height: 10),
                   ],
                   if (widget.trip.trackSleeping) ...[
-                    const SizedBox(height: 8),
                     _buildTentShelterToggle(),
+                    const SizedBox(height: 8),
                   ],
                   if (widget.trip.trackShower) ...[
-                    const SizedBox(height: 4),
                     _buildShowerSwitch(),
+                    const SizedBox(height: 4),
                   ],
                 ],
               ),

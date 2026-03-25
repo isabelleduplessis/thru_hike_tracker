@@ -1,9 +1,11 @@
+// gear_list_screen.dart
 // 1. import packages
 import 'package:flutter/material.dart';
 import '../models/gear.dart';
 import '../repositories/gear_repository.dart';
 import 'gear_form_screen.dart';
 import '../services/settings_service.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class GearListScreen extends StatefulWidget {
   const GearListScreen({Key? key}) : super(key: key);
@@ -75,7 +77,7 @@ class _GearListScreenState extends State<GearListScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.backpack,
+            PhosphorIcons.tent(PhosphorIconsStyle.regular),
             size: 100,
             color: Colors.grey[400],
           ),

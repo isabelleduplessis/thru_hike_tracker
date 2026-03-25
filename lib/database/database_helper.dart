@@ -1,6 +1,4 @@
 // database/database_helper.dart
-// Handles SQLite database setup and migrations
-
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -22,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       onOpen: (db) async {
@@ -44,7 +42,6 @@ class DatabaseHelper {
           type INTEGER NOT NULL
         )
       ''');
-      
       await db.execute('''
         CREATE TABLE trip_custom_fields (
           trip_id INTEGER NOT NULL,
@@ -55,7 +52,6 @@ class DatabaseHelper {
           FOREIGN KEY (custom_field_id) REFERENCES custom_fields (id) ON DELETE CASCADE
         )
       ''');
-      
       await db.execute('''
         CREATE TABLE custom_field_values (
           entry_id INTEGER NOT NULL,
@@ -87,7 +83,6 @@ class DatabaseHelper {
     if (oldVersion < 8) {
       await db.execute('DROP TABLE IF EXISTS entry_gear');
       await db.execute('DROP TABLE IF EXISTS gear');
-      
       await db.execute('''
         CREATE TABLE gear (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,7 +92,6 @@ class DatabaseHelper {
           end_date TEXT
         )
       ''');
-      
       await db.execute('''
         CREATE TABLE entry_gear (
           entry_id INTEGER NOT NULL,
@@ -111,7 +105,6 @@ class DatabaseHelper {
 
     if (oldVersion < 9) {
       await db.execute('ALTER TABLE trips ADD COLUMN direction INTEGER');
-      
       await db.execute('''
         CREATE TABLE sections (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,7 +115,6 @@ class DatabaseHelper {
           FOREIGN KEY (trip_id) REFERENCES trips (id) ON DELETE CASCADE
         )
       ''');
-      
       await db.execute('CREATE INDEX idx_sections_trip_id ON sections (trip_id)');
     }
 
@@ -142,7 +134,7 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 12) {
-      // Drop everything and recreate fresh with foreign_keys properly enforced
+      // Fresh start with foreign keys properly enforced
       await db.execute('DROP TABLE IF EXISTS custom_field_values');
       await db.execute('DROP TABLE IF EXISTS trip_custom_fields');
       await db.execute('DROP TABLE IF EXISTS custom_fields');
@@ -152,6 +144,29 @@ class DatabaseHelper {
       await db.execute('DROP TABLE IF EXISTS entries');
       await db.execute('DROP TABLE IF EXISTS trips');
       await _createDB(db, 12);
+    }
+
+    if (oldVersion < 13) {
+      // Add completed column to sections
+      await db.execute('ALTER TABLE sections ADD COLUMN completed INTEGER NOT NULL DEFAULT 0');
+
+      // Add alternates table
+      await db.execute('''
+        CREATE TABLE alternates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          trip_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          departure_mile REAL NOT NULL,
+          return_mile REAL NOT NULL,
+          length REAL NOT NULL,
+          completed INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (trip_id) REFERENCES trips (id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute('CREATE INDEX idx_alternates_trip_id ON alternates (trip_id)');
+
+      // Add alternate_id to entries
+      await db.execute('ALTER TABLE entries ADD COLUMN alternate_id INTEGER REFERENCES alternates (id) ON DELETE SET NULL');
     }
   }
 
@@ -184,10 +199,24 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         start_mile REAL NOT NULL,
         end_mile REAL NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (trip_id) REFERENCES trips (id) ON DELETE CASCADE
       )
     ''');
-    
+
+    await db.execute('''
+      CREATE TABLE alternates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        departure_mile REAL NOT NULL,
+        return_mile REAL NOT NULL,
+        length REAL NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (trip_id) REFERENCES trips (id) ON DELETE CASCADE
+      )
+    ''');
+
     await db.execute('''
       CREATE TABLE entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -206,7 +235,9 @@ class DatabaseHelper {
         longitude REAL,
         elevation_gain REAL,
         elevation_loss REAL,
-        FOREIGN KEY (trip_id) REFERENCES trips (id) ON DELETE CASCADE
+        alternate_id INTEGER,
+        FOREIGN KEY (trip_id) REFERENCES trips (id) ON DELETE CASCADE,
+        FOREIGN KEY (alternate_id) REFERENCES alternates (id) ON DELETE SET NULL
       )
     ''');
     
@@ -265,6 +296,7 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_entry_gear_entry ON entry_gear (entry_id)');
     await db.execute('CREATE INDEX idx_entry_gear_gear ON entry_gear (gear_id)');
     await db.execute('CREATE INDEX idx_sections_trip_id ON sections (trip_id)');
+    await db.execute('CREATE INDEX idx_alternates_trip_id ON alternates (trip_id)');
   }
 
   Future close() async {

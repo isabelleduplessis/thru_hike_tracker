@@ -7,7 +7,8 @@ import '../models/section.dart';
 class TripRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  // --- INTERNAL HELPER ---
+  // ── Internal helpers ──────────────────────────────────────────────────────
+
   Future<List<Section>> _getSectionsForTrip(DatabaseExecutor db, int tripId) async {
     final maps = await db.query(
       'sections',
@@ -18,7 +19,18 @@ class TripRepository {
     return maps.map((map) => Section.fromMap(map)).toList();
   }
 
-  // CREATE
+  Future<List<Alternate>> _getAlternatesForTrip(DatabaseExecutor db, int tripId) async {
+    final maps = await db.query(
+      'alternates',
+      where: 'trip_id = ?',
+      whereArgs: [tripId],
+      orderBy: 'departure_mile ASC',
+    );
+    return maps.map((map) => Alternate.fromMap(map)).toList();
+  }
+
+  // ── CREATE ────────────────────────────────────────────────────────────────
+
   Future<Trip> createTrip(Trip trip) async {
     final db = await _dbHelper.database;
     return await db.transaction((txn) async {
@@ -26,21 +38,27 @@ class TripRepository {
       for (var section in trip.sections) {
         await txn.insert('sections', section.copyWith(tripId: id).toMap());
       }
+      for (var alternate in trip.alternates) {
+        await txn.insert('alternates', alternate.copyWith(tripId: id).toMap());
+      }
       return trip.copyWith(id: id);
     });
   }
 
-  // READ - Single
+  // ── READ — Single ─────────────────────────────────────────────────────────
+
   Future<Trip?> getTripById(int id) async {
     final db = await _dbHelper.database;
     final maps = await db.query('trips', where: 'id = ?', whereArgs: [id]);
     if (maps.isEmpty) return null;
 
     final sections = await _getSectionsForTrip(db, id);
-    return Trip.fromMap(maps.first, sections: sections);
+    final alternates = await _getAlternatesForTrip(db, id);
+    return Trip.fromMap(maps.first, sections: sections, alternates: alternates);
   }
 
-  // READ - All
+  // ── READ — All ────────────────────────────────────────────────────────────
+
   Future<List<Trip>> getAllTrips() async {
     final db = await _dbHelper.database;
     final maps = await db.query('trips', orderBy: 'start_date DESC');
@@ -49,12 +67,14 @@ class TripRepository {
     for (var map in maps) {
       final id = map['id'] as int;
       final sections = await _getSectionsForTrip(db, id);
-      trips.add(Trip.fromMap(map, sections: sections));
+      final alternates = await _getAlternatesForTrip(db, id);
+      trips.add(Trip.fromMap(map, sections: sections, alternates: alternates));
     }
     return trips;
   }
 
-  // READ - By Status
+  // ── READ — By Status ──────────────────────────────────────────────────────
+
   Future<List<Trip>> getTripsByStatus(TripStatus status) async {
     final db = await _dbHelper.database;
     final maps = await db.query(
@@ -68,18 +88,18 @@ class TripRepository {
     for (var map in maps) {
       final id = map['id'] as int;
       final sections = await _getSectionsForTrip(db, id);
-      trips.add(Trip.fromMap(map, sections: sections));
+      final alternates = await _getAlternatesForTrip(db, id);
+      trips.add(Trip.fromMap(map, sections: sections, alternates: alternates));
     }
     return trips;
   }
 
-  // UPDATE
-  // UPDATE - Modify an existing trip and its sections
+  // ── UPDATE ────────────────────────────────────────────────────────────────
+
   Future<int> updateTrip(Trip trip) async {
     final db = await _dbHelper.database;
 
     return await db.transaction((txn) async {
-      // 1. Update the Trip row itself
       final result = await txn.update(
         'trips',
         trip.toMap(),
@@ -87,26 +107,57 @@ class TripRepository {
         whereArgs: [trip.id],
       );
 
-      // 2. Remove all old sections associated with this trip
+      // Replace sections
       await txn.delete('sections', where: 'trip_id = ?', whereArgs: [trip.id]);
-
-      // 3. Insert the new/updated sections
       for (var section in trip.sections) {
-        // Copy the section to ensure it has the correct tripId before saving
         await txn.insert('sections', section.copyWith(tripId: trip.id).toMap());
+      }
+
+      // Replace alternates
+      await txn.delete('alternates', where: 'trip_id = ?', whereArgs: [trip.id]);
+      for (var alternate in trip.alternates) {
+        await txn.insert('alternates', alternate.copyWith(tripId: trip.id).toMap());
       }
 
       return result;
     });
   }
 
-  // DELETE
+  // ── UPDATE — Alternate completion only ────────────────────────────────────
+  // Used when marking an alternate complete from the stats screen
+  // without going through the full trip update flow
+
+  Future<void> setAlternateCompleted(int alternateId, bool completed) async {
+    final db = await _dbHelper.database;
+    await db.update(
+      'alternates',
+      {'completed': completed ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [alternateId],
+    );
+  }
+
+  // ── UPDATE — Section completion only ─────────────────────────────────────
+
+  Future<void> setSectionCompleted(int sectionId, bool completed) async {
+    final db = await _dbHelper.database;
+    await db.update(
+      'sections',
+      {'completed': completed ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [sectionId],
+    );
+  }
+
+  // ── DELETE ────────────────────────────────────────────────────────────────
+
   Future<int> deleteTrip(int id) async {
     final db = await _dbHelper.database;
     return await db.delete('trips', where: 'id = ?', whereArgs: [id]);
   }
 
-  // PRESERVED SPECIALIZED METHODS
+  // ── Specialized queries ───────────────────────────────────────────────────
+
   Future<Trip?> getMostRecentTrip() async {
     final db = await _dbHelper.database;
     final result = await db.rawQuery('''
@@ -121,7 +172,8 @@ class TripRepository {
     
     final id = result.first['id'] as int;
     final sections = await _getSectionsForTrip(db, id);
-    return Trip.fromMap(result.first, sections: sections);
+    final alternates = await _getAlternatesForTrip(db, id);
+    return Trip.fromMap(result.first, sections: sections, alternates: alternates);
   }
 
   Future<Trip?> getLongestTrip() async {
@@ -129,7 +181,7 @@ class TripRepository {
 
     final result = await db.rawQuery('''
       SELECT t.*, SUM(
-        (e.end_mile - e.start_mile) + e.extra_miles - e.skipped_miles
+        ABS(e.end_mile - e.start_mile) + e.extra_miles - e.skipped_miles
       ) as total_miles
       FROM trips t
       LEFT JOIN entries e ON t.id = e.trip_id
@@ -142,7 +194,8 @@ class TripRepository {
 
     final id = result.first['id'] as int;
     final sections = await _getSectionsForTrip(db, id);
-    return Trip.fromMap(result.first, sections: sections);
+    final alternates = await _getAlternatesForTrip(db, id);
+    return Trip.fromMap(result.first, sections: sections, alternates: alternates);
   }
 
   Future<void> updateTripEndDate(int tripId) async {
@@ -159,5 +212,19 @@ class TripRepository {
     if (maxDateStr != null) {
       await db.update('trips', {'end_date': maxDateStr}, where: 'id = ?', whereArgs: [tripId]);
     }
+  }
+
+  // ── Alternates — get incomplete for a trip ────────────────────────────────
+  // Used in entry form to show available alternates to select
+
+  Future<List<Alternate>> getIncompleteAlternatesForTrip(int tripId) async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(
+      'alternates',
+      where: 'trip_id = ? AND completed = 0',
+      whereArgs: [tripId],
+      orderBy: 'departure_mile ASC',
+    );
+    return maps.map((map) => Alternate.fromMap(map)).toList();
   }
 }

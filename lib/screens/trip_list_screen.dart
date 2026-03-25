@@ -1,8 +1,7 @@
 // screens/trip_list_screen.dart
-// Shows list of all trips, allows creating new ones
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../models/trip.dart';
 import '../repositories/trip_repository.dart';
 import '../repositories/entry_repository.dart';
@@ -39,12 +38,8 @@ class _TripListScreenState extends State<TripListScreen> {
   }
 
   Future<void> _loadTrips() async {
-    setState(() {
-      _isLoading = true;
-    });
-    
+    setState(() => _isLoading = true);
     final trips = await _tripRepository.getAllTrips();
-    
     final latestDates = <int, DateTime?>{};
     for (final trip in trips) {
       latestDates[trip.id!] = await _entryRepository.getLastEntryDateForTrip(trip.id!);
@@ -60,6 +55,7 @@ class _TripListScreenState extends State<TripListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('My Hikes'),
         actions: [
           if (_isImporting)
@@ -67,29 +63,55 @@ class _TripListScreenState extends State<TripListScreen> {
               padding: EdgeInsets.all(16),
               child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
             )
-          else
+          else ...[
+            // + button to add new trip
+            IconButton(
+              icon: Icon(PhosphorIcons.plus(), size: 20),
+              tooltip: 'New hike',
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TripFormScreen()),
+                );
+                if (result == true) _loadTrips();
+              },
+            ),
+            // Three-dot menu
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
+              icon: Icon(PhosphorIcons.dotsThreeVertical(), size: 20),
               onSelected: (value) {
                 if (value == 'import') _importCsv();
                 if (value == 'export') _exportTrip();
                 if (value == 'template') _downloadTemplate();
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'import',
-                  child: Row(children: [Icon(Icons.upload_file), SizedBox(width: 12), Text('Import from CSV')]),
+                  child: Row(children: [
+                    Icon(PhosphorIcons.uploadSimple(), size: 18),
+                    const SizedBox(width: 12),
+                    const Text('Import from CSV'),
+                  ]),
                 ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'export',
-                  child: Row(children: [Icon(Icons.download), SizedBox(width: 12), Text('Export to CSV')]),
+                  child: Row(children: [
+                    Icon(PhosphorIcons.downloadSimple(), size: 18),
+                    const SizedBox(width: 12),
+                    const Text('Export to CSV'),
+                  ]),
                 ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'template',
-                  child: Row(children: [Icon(Icons.download), SizedBox(width: 12), Text('Download template')]),
+                  child: Row(children: [
+                    Icon(PhosphorIcons.fileArrowDown(), size: 18),
+                    const SizedBox(width: 12),
+                    const Text('Download template'),
+                  ]),
                 ),
               ],
             ),
+          ],
         ],
       ),
       body: _isLoading
@@ -97,28 +119,7 @@ class _TripListScreenState extends State<TripListScreen> {
           : _trips.isEmpty
               ? _buildEmptyState()
               : _buildTripList(),
-      
-      floatingActionButton: FloatingActionButton( 
-        onPressed: () async {
-          // Navigate to create trip screen
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const TripFormScreen(), 
-            ),
-          );
-          
-          // If a trip was created, reload the list
-          if (result == true) {
-            _loadTrips();
-          }
-        },
-        child: const Icon(Icons.add),
-      ),
-      // Add this somewhere you can tap it
-
     );
-    
   }
 
   Widget _buildEmptyState() {
@@ -126,21 +127,11 @@ class _TripListScreenState extends State<TripListScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.hiking,
-            size: 100,
-            color: Colors.grey[400],
-          ),
+          Icon(PhosphorIcons.mountains(), size: 100, color: Colors.grey[400]),
           const SizedBox(height: 16),
-          Text(
-            'No hikes yet!',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
+          Text('No hikes yet!', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
-          Text(
-            'Tap the + button to start your first hike',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
+          Text('Tap + to start your first hike', style: TextStyle(color: Colors.grey[600])),
         ],
       ),
     );
@@ -150,15 +141,11 @@ class _TripListScreenState extends State<TripListScreen> {
     return ListView.builder(
       padding: const EdgeInsets.all(8),
       itemCount: _trips.length,
-      itemBuilder: (context, index) {
-        final trip = _trips[index];
-        return _buildTripCard(trip);
-      },
+      itemBuilder: (context, index) => _buildTripCard(_trips[index]),
     );
   }
 
   Widget _buildTripCard(Trip trip) {
-    // Format dates
     final dateFormat = DateFormat('MMM d, yyyy');
     final startStr = dateFormat.format(trip.startDate);
     final latestDate = _latestEntryDates[trip.id];
@@ -167,88 +154,78 @@ class _TripListScreenState extends State<TripListScreen> {
         : trip.endDate != null
             ? dateFormat.format(trip.endDate!)
             : dateFormat.format(trip.startDate);
-    
-    // Show date range only if spans multiple months
-    final dateDisplay = '$startStr - $endStr';
-    
-    // Status badge color
+
     final statusColor = _getStatusColor(trip.status);
-    
+
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        title: Text(
-          trip.name,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(dateDisplay),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                _getStatusText(trip.status),
-                style: TextStyle(
-                  color: statusColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        trailing: const Icon(Icons.chevron_right),
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      child: InkWell(
         onTap: () async {
-          // Navigate to trip detail/entries screen
           await Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => TripDetailScreen(trip: trip),
-            ),
+            MaterialPageRoute(builder: (context) => TripDetailScreen(trip: trip)),
           );
-          
-          // Reload trips in case anything changed
           _loadTrips();
         },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Trip name — matches entry card day/date size (14px bold)
+                    Text(
+                      trip.name,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 3),
+                    // Date range — matches start→end size (12px grey)
+                    Text(
+                      '$startStr → $endStr',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _getStatusText(trip.status),
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(PhosphorIcons.caretRight(), size: 16, color: Colors.grey[400]),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  bool _spansMultipleMonths(DateTime start, DateTime? end) {
-    if (end == null) return true;
-    return start.month != end.month || start.year != end.year;
-  }
-
   Color _getStatusColor(TripStatus status) {
     switch (status) {
-      case TripStatus.paused:
-        return Colors.blue;
-      case TripStatus.active:
-        return Colors.green;
-      case TripStatus.completed:
-        return Colors.grey;
+      case TripStatus.paused:    return Colors.blue;
+      case TripStatus.active:    return Colors.green;
+      case TripStatus.completed: return Colors.grey;
     }
   }
 
   String _getStatusText(TripStatus status) {
     switch (status) {
-      case TripStatus.paused:
-        return 'Paused';
-      case TripStatus.active:
-        return 'Active';
-      case TripStatus.completed:
-        return 'Completed';
+      case TripStatus.paused:    return 'Paused';
+      case TripStatus.active:    return 'Active';
+      case TripStatus.completed: return 'Completed';
     }
   }
 
@@ -291,7 +268,9 @@ class _TripListScreenState extends State<TripListScreen> {
               if (importResult.trip != null) {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => TripDetailScreen(trip: importResult.trip!)),
+                  MaterialPageRoute(
+                    builder: (context) => TripDetailScreen(trip: importResult.trip!),
+                  ),
                 ).then((_) => _loadTrips());
               }
             },
@@ -328,10 +307,12 @@ class _TripListScreenState extends State<TripListScreen> {
       context: context,
       builder: (context) => SimpleDialog(
         title: const Text('Select hike to export'),
-        children: _trips.map((t) => SimpleDialogOption(
-          onPressed: () => Navigator.pop(context, t),
-          child: Text(t.name),
-        )).toList(),
+        children: _trips
+            .map((t) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, t),
+                  child: Text(t.name),
+                ))
+            .toList(),
       ),
     );
     if (trip == null) return;

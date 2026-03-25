@@ -13,6 +13,7 @@ class Trip {
   final double endMile;
   final Direction? direction;
   final List<Section> sections;
+  final List<Alternate> alternates;
   final bool trackCoordinates;
   final bool trackShower;
   final bool trackElevation;
@@ -30,6 +31,7 @@ class Trip {
     double? endMile,
     this.direction,
     this.sections = const [],
+    this.alternates = const [],
     this.trackCoordinates = false,
     this.trackShower = false,
     this.trackElevation = false,
@@ -53,11 +55,15 @@ class Trip {
       'track_elevation': trackElevation ? 1 : 0,
       'track_sleeping': trackSleeping ? 1 : 0,
       'nero_threshold': neroThreshold,
-      // Sections are stored in a separate table, so we don't include them in the Trip map
+      // sections and alternates stored in separate tables
     };
   }
   
-  factory Trip.fromMap(Map<String, dynamic> map, {List<Section> sections = const []}) {
+  factory Trip.fromMap(
+    Map<String, dynamic> map, {
+    List<Section> sections = const [],
+    List<Alternate> alternates = const [],
+  }) {
     return Trip(
       id: map['id'] as int?,
       name: map['name'] as String,
@@ -70,9 +76,10 @@ class Trip {
       tripLength: (map['trip_length'] as num?)?.toDouble() ?? 0.0,
       endMile: (map['end_mile'] as num?)?.toDouble() ?? 0.0,
       direction: map['direction'] != null 
-        ? Direction.values[map['direction'] as int]
-        : null,
-      sections: sections, // Now properly assigned from the repository fetch
+          ? Direction.values[map['direction'] as int]
+          : null,
+      sections: sections,
+      alternates: alternates,
       trackCoordinates: (map['track_coordinates'] as int? ?? 0) == 1,
       trackShower: (map['track_shower'] as int? ?? 0) == 1,
       trackElevation: (map['track_elevation'] as int? ?? 0) == 1,
@@ -92,6 +99,7 @@ class Trip {
     double? endMile,
     Direction? direction,
     List<Section>? sections,
+    List<Alternate>? alternates,
     bool? trackCoordinates,
     bool? trackShower,
     bool? trackElevation,
@@ -109,6 +117,7 @@ class Trip {
       endMile: endMile ?? this.endMile,
       direction: direction ?? this.direction,
       sections: sections ?? this.sections,
+      alternates: alternates ?? this.alternates,
       trackCoordinates: trackCoordinates ?? this.trackCoordinates,
       trackShower: trackShower ?? this.trackShower,
       trackElevation: trackElevation ?? this.trackElevation,
