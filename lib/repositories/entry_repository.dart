@@ -349,4 +349,49 @@ class EntryRepository {
         (row['alternate_id'] as int): (row['total'] as num?)?.toDouble() ?? 0.0
     };
   }
+  Future<double> getBestRolling7DayMilesAllTrips() async {
+    // help me fill in this function 
+    final db = await _dbHelper.database;
+    final result = await db.rawQuery('''
+      SELECT date, SUM((end_mile - start_mile) + extra_miles - skipped_miles) as day_total
+      FROM entries
+      GROUP BY SUBSTR(date, 1, 10)
+      ORDER BY date ASC
+    ''');
+
+    if (result.isEmpty) return 0.0;
+
+    final dailyMiles = result.map((row) {
+      return {
+      'date': DateTime.parse(row['date'] as String),
+      'miles': (row['day_total'] as num?)?.toDouble() ?? 0.0,
+      };
+    }).toList();
+
+    double maxMiles = 0.0;
+
+    for (int i = 0; i < dailyMiles.length; i++) {
+      double rollingMiles = 0.0;
+      final startDate = dailyMiles[i]['date'] as DateTime;
+
+      for (int j = i; j < dailyMiles.length; j++) {
+      final currentDate = dailyMiles[j]['date'] as DateTime;
+      if (currentDate.difference(startDate).inDays < 7) {
+        rollingMiles += dailyMiles[j]['miles'] as double;
+        maxMiles = rollingMiles > maxMiles ? rollingMiles : maxMiles;
+      } else {
+        break;
+      }
+      }
+    }
+
+    return maxMiles;
+
+    // Implement the logic to calculate the best rolling 7-day miles for all trips
+
+    // Example placeholder logic:
+
+    return 0.0; // Replace with actual calculation
+
+  }
 }
