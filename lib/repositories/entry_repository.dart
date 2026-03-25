@@ -330,4 +330,23 @@ class EntryRepository {
     if (result.isEmpty || result.first['last_date'] == null) return null;
     return DateTime.parse(result.first['last_date'] as String);
   }
+
+  // STATS - Get total miles per alternate ID for a trip.
+  // Used for progress bar calculations in stats screen.
+  // Formula: ABS(end_mile - start_mile) + extra_miles - skipped_miles
+  // (extra and skipped are always 0 for alternate entries, but formula is uniform)
+  Future<Map<int, double>> getAltMilesByAlternateId(int tripId) async {
+    final db = await _dbHelper.database;
+    final result = await db.rawQuery('''
+      SELECT alternate_id,
+             SUM(ABS(end_mile - start_mile) + extra_miles - skipped_miles) as total
+      FROM entries
+      WHERE trip_id = ? AND alternate_id IS NOT NULL
+      GROUP BY alternate_id
+    ''', [tripId]);
+    return {
+      for (final row in result)
+        (row['alternate_id'] as int): (row['total'] as num?)?.toDouble() ?? 0.0
+    };
+  }
 }

@@ -46,6 +46,9 @@ class _StatsScreenState extends State<StatsScreen> {
   double _totalElevationGain = 0;
   double _totalElevationLoss = 0;
 
+  // alternateId -> total miles logged on that alternate for current trip
+  Map<int, double> _altMilesMap = {};
+
   double _entryDistance(Entry e) =>
       _includeExtraSkippedMiles ? e.totalDistance : e.netDistance;
 
@@ -67,12 +70,6 @@ class _StatsScreenState extends State<StatsScreen> {
     } else {
       _loadStatsForAllTrips();
     }
-  }
-
-  double _calculateMilesInSection(Section section) {
-    return _chartEntries.where((e) {
-      return e.endMile > section.startMile && e.endMile <= section.endMile;
-    }).fold(0.0, (sum, e) => sum + e.totalDistance);
   }
 
   Future<void> _recalculateCustomFieldStats() async {
@@ -124,6 +121,7 @@ class _StatsScreenState extends State<StatsScreen> {
       _totalElevationGain = elevationGain;
       _totalElevationLoss = elevationLoss;
       _neroDays = 0;
+      _altMilesMap = {};
     });
   }
 
@@ -177,6 +175,7 @@ class _StatsScreenState extends State<StatsScreen> {
     final elevationLoss = trip.trackElevation
         ? await _entryRepository.getTotalElevationLossForTrip(trip.id!)
         : 0.0;
+    final altMilesMap = await _entryRepository.getAltMilesByAlternateId(trip.id!);
 
     setState(() {
       _selectedTrip = trip;
@@ -189,6 +188,7 @@ class _StatsScreenState extends State<StatsScreen> {
       _neroDays = neroDays;
       _totalElevationGain = elevationGain;
       _totalElevationLoss = elevationLoss;
+      _altMilesMap = altMilesMap;
       _isLoading = false;
     });
 
@@ -217,7 +217,6 @@ class _StatsScreenState extends State<StatsScreen> {
                     _buildDonutChart(_allTrips, _allTripMiles),
                   ],
                   if (_selectedTrip != null && _filteredChartEntries.map((e) => e.date.toIso8601String().substring(0, 10)).toSet().length > 1) ...[
-                    // if (_filteredChartEntries.map((e) => e.date.toIso8601String().substring(0, 10)).toSet().length > 1)
                     _buildChartSection(),
                     const SizedBox(height: 24),
                   ],
@@ -231,27 +230,6 @@ class _StatsScreenState extends State<StatsScreen> {
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.bar_chart, size: 100, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
-            'No entries yet!',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Start logging your hikes to see stats',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
-      ),
     );
   }
 
@@ -298,7 +276,6 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _buildMainStats() {
     return Column(
       children: [
-        // First row — always show Total Distance, only pair with Total Days if trip selected
         Row(
           children: [
             Expanded(
@@ -335,53 +312,28 @@ class _StatsScreenState extends State<StatsScreen> {
         Row(
           children: [
             Expanded(
-              child: _buildStatCard(
-                'Longest Day',
-                _settings.formatDistance(_longestDay),
-                Icons.emoji_events,
-                Colors.purple,
-              ),
+              child: _buildStatCard('Longest Day', _settings.formatDistance(_longestDay), Icons.emoji_events, Colors.purple),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildStatCard(
-                'Best Streak',
-                '$_bestStreak days',
-                Icons.local_fire_department,
-                Colors.deepOrange,
-              ),
+              child: _buildStatCard('Best Streak', '$_bestStreak days', Icons.local_fire_department, Colors.deepOrange),
             ),
           ],
         ),
         if (_selectedTrip != null && _selectedTrip!.neroThreshold != null) ...[
           const SizedBox(height: 10),
-          _buildStatCard(
-            'Nero Days',
-            _neroDays.toString(),
-            Icons.directions_walk,
-            Colors.amber,
-          ),
+          _buildStatCard('Nero Days', _neroDays.toString(), Icons.directions_walk, Colors.amber),
         ],
         if (_totalElevationGain > 0 || _totalElevationLoss > 0) ...[
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
-                child: _buildStatCard(
-                  'Total Gain',
-                  _settings.formatElevation(_totalElevationGain),
-                  Icons.trending_up,
-                  Colors.green,
-                ),
+                child: _buildStatCard('Total Gain', _settings.formatElevation(_totalElevationGain), Icons.trending_up, Colors.green),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildStatCard(
-                  'Total Loss',
-                  _settings.formatElevation(_totalElevationLoss),
-                  Icons.trending_down,
-                  Colors.red,
-                ),
+                child: _buildStatCard('Total Loss', _settings.formatElevation(_totalElevationLoss), Icons.trending_down, Colors.red),
               ),
             ],
           ),
@@ -409,12 +361,7 @@ class _StatsScreenState extends State<StatsScreen> {
           Row(
             children: [
               Expanded(
-                child: _buildStatCard(
-                  'Total Trips',
-                  _totalTrips.toString(),
-                  Icons.map,
-                  Colors.teal,
-                ),
+                child: _buildStatCard('Total Trips', _totalTrips.toString(), Icons.map, Colors.teal),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -434,63 +381,188 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-    );
+  // ── Progress helpers ────────────────────────────────────────────────────
+
+  /// Sum of extra miles - skipped miles for regular (non-alternate) entries
+  /// that fall within [rangeStart, rangeEnd] by end mile.
+  double _sectionExtraMinusSkipped(double rangeStart, double rangeEnd) {
+    return _chartEntries
+        .where((e) =>
+            e.alternateId == null &&
+            e.endMile > rangeStart &&
+            e.endMile <= rangeEnd)
+        .fold(0.0, (sum, e) => sum + e.extraMiles - e.skippedMiles);
   }
 
-  Widget _buildTopFilters() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            const Text('Include zero days', style: TextStyle(fontSize: 13)),
-            Switch(
-              value: _includeZeroDays,
-              onChanged: (value) {
-                setState(() => _includeZeroDays = value);
-                _recalculateStats();
-              },
-            ),
-          ],
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            const Text('Include extra/skipped', style: TextStyle(fontSize: 13)),
-            Switch(
-              value: _includeExtraSkippedMiles,
-              onChanged: (value) {
-                setState(() => _includeExtraSkippedMiles = value);
-                _recalculateStats();
-              },
-            ),
-          ],
-        ),
-      ],
-    );
+  /// Total extra - skipped across all regular entries for the trip.
+  double get _totalExtraMinusSkipped => _chartEntries
+      .where((e) => e.alternateId == null)
+      .fold(0.0, (sum, e) => sum + e.extraMiles - e.skippedMiles);
+
+  /// Unique trail coverage (ignoring alternate entries) within [rangeStart, rangeEnd].
+  double _calculateUniqueCoverage(double rangeStart, double rangeEnd) {
+    if (_chartEntries.isEmpty) return 0.0;
+
+    // Only regular (non-alternate) entries contribute to trail coverage
+    final regularEntries = _chartEntries.where((e) => e.alternateId == null);
+
+    List<List<double>> ranges = regularEntries.map((e) {
+      double start = e.startMile < e.endMile ? e.startMile : e.endMile;
+      double end = e.startMile < e.endMile ? e.endMile : e.startMile;
+      return [start, end];
+    }).toList();
+
+    ranges.sort((a, b) => a[0].compareTo(b[0]));
+
+    List<List<double>> merged = [];
+    if (ranges.isNotEmpty) {
+      var current = List<double>.from(ranges[0]);
+      for (int i = 1; i < ranges.length; i++) {
+        if (ranges[i][0] <= current[1]) {
+          if (ranges[i][1] > current[1]) current[1] = ranges[i][1];
+        } else {
+          merged.add(current);
+          current = List<double>.from(ranges[i]);
+        }
+      }
+      merged.add(current);
+    }
+
+    double totalCoverage = 0;
+    for (var m in merged) {
+      double overlapStart = m[0] > rangeStart ? m[0] : rangeStart;
+      double overlapEnd = m[1] < rangeEnd ? m[1] : rangeEnd;
+      if (overlapStart < overlapEnd) {
+        totalCoverage += (overlapEnd - overlapStart);
+      }
+    }
+    return totalCoverage;
   }
+
+  /// Returns completed alternates whose departure mile falls within
+  /// [rangeStart, rangeEnd] — used for section-level progress.
+  List<Alternate> _completedAltsInRange(double rangeStart, double rangeEnd) {
+    if (_selectedTrip == null) return [];
+    return _selectedTrip!.alternates.where((a) =>
+        a.completed &&
+        a.departureMile >= rangeStart &&
+        a.departureMile < rangeEnd).toList();
+  }
+
+  /// All completed alternates for the trip.
+  List<Alternate> get _allCompletedAlts {
+    if (_selectedTrip == null) return [];
+    return _selectedTrip!.alternates.where((a) => a.completed).toList();
+  }
+
+  ProgressData _calculateSectionProgress(Section section) {
+    final extraSkipped = _sectionExtraMinusSkipped(section.startMile, section.endMile);
+    final trailCoverage = _calculateUniqueCoverage(section.startMile, section.endMile);
+
+    double altNumeratorBonus = 0;
+    double altDenominatorAdjust = 0;
+    for (final alt in _completedAltsInRange(section.startMile, section.endMile)) {
+      final altMiles = _altMilesMap[alt.id] ?? 0.0;
+      final gap = alt.returnMile - alt.departureMile;
+      altNumeratorBonus += altMiles;
+      altDenominatorAdjust += altMiles - gap;
+    }
+
+    final actualCovered = trailCoverage + altNumeratorBonus + extraSkipped;
+
+    if (section.completed) {
+      // 100% — denominator equals what was actually hiked, not section length
+      return ProgressData(actualCovered, actualCovered);
+    }
+
+    final sectionLength = section.endMile - section.startMile;
+    final denominator = sectionLength + altDenominatorAdjust + extraSkipped;
+    return ProgressData(actualCovered, denominator);
+  }
+
+  ProgressData _calculateOverallProgress() {
+    final trip = _selectedTrip!;
+    final extraSkipped = _totalExtraMinusSkipped;
+    final trailCoverage = _calculateUniqueCoverage(trip.startMile, trip.endMile);
+
+    // Alternate adjustments
+    double altNumeratorBonus = 0;
+    double altDenominatorAdjust = 0;
+    for (final alt in _allCompletedAlts) {
+      final altMiles = _altMilesMap[alt.id] ?? 0.0;
+      final gap = alt.returnMile - alt.departureMile;
+      altNumeratorBonus += altMiles;
+      altDenominatorAdjust += altMiles - gap;
+    }
+
+    // Completed section gap reduction
+    // For each completed section, subtract the uncovered trail gap from denominator
+    double sectionGapReduction = 0;
+    for (final section in _selectedTrip!.sections.where((s) => s.completed)) {
+      final sectionLength = section.endMile - section.startMile;
+      final covered = _calculateUniqueCoverage(section.startMile, section.endMile);
+      // Also account for completed alts departing from this section
+      double sectionAltBonus = 0;
+      for (final alt in _completedAltsInRange(section.startMile, section.endMile)) {
+        sectionAltBonus += _altMilesMap[alt.id] ?? 0.0;
+      }
+      final actualCovered = covered + sectionAltBonus;
+      final gap = (sectionLength - actualCovered).clamp(0.0, double.infinity);
+      sectionGapReduction += gap;
+    }
+
+    final numerator = trailCoverage + altNumeratorBonus + extraSkipped;
+    final denominator = trip.tripLength + altDenominatorAdjust + extraSkipped - sectionGapReduction;
+    return ProgressData(numerator, denominator);
+  }
+
+  // ── Progress widgets ────────────────────────────────────────────────────
 
   Widget _buildOverallProgress() {
     if (_selectedTrip == null) return const SizedBox.shrink();
-    final stats = _calculateAdjustedProgress(0, _selectedTrip!.tripLength);
+    final stats = _calculateOverallProgress();
     return _buildBaseProgressBar(
       stats.percentage,
       stats.coveredWithExtra,
       stats.adjustedTotal,
-      "Overall Progress",
+      'Overall Progress',
     );
   }
+
+  Widget _buildSectionBreakdown() {
+    if (_selectedTrip == null || _selectedTrip!.sections.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(padding: EdgeInsets.only(top: 16, bottom: 8)),
+        ..._selectedTrip!.sections.asMap().entries.map((e) {
+          final index = e.key;
+          final section = e.value;
+          final stats = _calculateSectionProgress(section);
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildBaseProgressBar(
+              stats.percentage,
+              stats.coveredWithExtra,
+              stats.adjustedTotal,
+              section.name,
+              color: sectionColor(_selectedTrip!.id!, index),
+            ),
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  // ── Unchanged below ─────────────────────────────────────────────────────
 
   Widget _buildBaseProgressBar(double progress, double completed, double total, String label, {Color? color}) {
     final barColor = color ?? Theme.of(context).colorScheme.primary;
     final remaining = (total - completed).clamp(0.0, double.infinity);
     final percentText = '${(progress * 100).toStringAsFixed(1)}%';
-    final isOverall = label == "Overall Progress";
+    final isOverall = label == 'Overall Progress';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -607,16 +679,10 @@ class _StatsScreenState extends State<StatsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Daily Distance',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
+        const Text('Daily Distance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         if (_filteredChartEntries.map((e) => e.date.toIso8601String().substring(0, 10)).toSet().length > 1)
-          SizedBox(
-            height: 260,
-            child: _buildLineChart(),
-          )
+          SizedBox(height: 260, child: _buildLineChart())
         else
           const Center(
             child: Padding(
@@ -638,12 +704,7 @@ class _StatsScreenState extends State<StatsScreen> {
     }
     final sortedDays = dailyMiles.keys.toList()..sort();
 
-    final dayNums = calculateDayNumbers(
-      _filteredChartEntries,
-      _selectedTrip!.startDate,
-    );
-
-    // Build a map of dateStr -> dayNumber
+    final dayNums = calculateDayNumbers(_filteredChartEntries, _selectedTrip!.startDate);
     final dateToDayNum = <String, int>{};
     for (final entry in _filteredChartEntries) {
       final dateStr = entry.date.toIso8601String().substring(0, 10);
@@ -662,7 +723,6 @@ class _StatsScreenState extends State<StatsScreen> {
     final lastDay = allDayNums.last;
     final firstDay = allDayNums.first;
 
-    // Step based on total days — used for both grid and labels
     final step = totalDays <= 10 ? 1
         : totalDays <= 30 ? 5
         : totalDays <= 100 ? 10
@@ -674,7 +734,6 @@ class _StatsScreenState extends State<StatsScreen> {
     final maxInDisplayUnit = _settings.convertToDisplayUnit(maxMiles);
     final yMax = ((maxInDisplayUnit / 5).ceil() * 5).toDouble();
     final yInterval = yMax <= 25 ? 5.0 : (yMax / 5).ceilToDouble();
-
     final xGridInterval = step.toDouble();
 
     return LineChart(
@@ -688,14 +747,8 @@ class _StatsScreenState extends State<StatsScreen> {
           drawVerticalLine: true,
           horizontalInterval: yInterval,
           verticalInterval: xGridInterval,
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.grey.withOpacity(0.2),
-            strokeWidth: 1,
-          ),
-          getDrawingVerticalLine: (value) => FlLine(
-            color: Colors.grey.withOpacity(0.2),
-            strokeWidth: 1,
-          ),
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
+          getDrawingVerticalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
         ),
         borderData: FlBorderData(
           show: true,
@@ -732,10 +785,7 @@ class _StatsScreenState extends State<StatsScreen> {
               interval: yInterval,
               reservedSize: 35,
               getTitlesWidget: (value, meta) {
-                return Text(
-                  value.toInt().toString(),
-                  style: const TextStyle(fontSize: 10),
-                );
+                return Text(value.toInt().toString(), style: const TextStyle(fontSize: 10));
               },
             ),
           ),
@@ -748,17 +798,7 @@ class _StatsScreenState extends State<StatsScreen> {
             isCurved: false,
             color: Colors.green,
             barWidth: 2.5,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, bar, index) {
-                return FlDotCirclePainter(
-                  radius: 4,
-                  color: Colors.white,
-                  strokeWidth: 2,
-                  strokeColor: Colors.green,
-                );
-              },
-            ),
+            dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
               color: Colors.green.withOpacity(0.15),
@@ -811,16 +851,11 @@ class _StatsScreenState extends State<StatsScreen> {
           ),
           value: _selectedTrip?.id,
           items: [
-            const DropdownMenuItem<int?>(
-              value: null,
-              child: Text('All'),
-            ),
-            ...trips.map((trip) {
-              return DropdownMenuItem<int?>(
-                value: trip.id,
-                child: Text(trip.name),
-              );
-            }),
+            const DropdownMenuItem<int?>(value: null, child: Text('All')),
+            ...trips.map((trip) => DropdownMenuItem<int?>(
+              value: trip.id,
+              child: Text(trip.name),
+            )),
           ],
           onChanged: (int? newValue) {
             if (newValue == null) {
@@ -889,11 +924,7 @@ class _StatsScreenState extends State<StatsScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          e.value.name,
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        Text(e.value.name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
                       ],
                     ),
                   );
@@ -906,69 +937,6 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  Widget _buildSectionBreakdown() {
-    if (_selectedTrip == null || _selectedTrip!.sections.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(padding: EdgeInsets.only(top: 16, bottom: 8)),
-        ..._selectedTrip!.sections.asMap().entries.map((e) {
-          final index = e.key;
-          final section = e.value;
-          final stats = _calculateAdjustedProgress(section.startMile, section.endMile);
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _buildBaseProgressBar(
-              stats.percentage,
-              stats.coveredWithExtra,
-              stats.adjustedTotal,
-              section.name,
-              color: sectionColor(_selectedTrip!.id!, index),
-            ),
-          );
-        }).toList(),
-      ],
-    );
-  }
-
-  double _calculateUniqueCoverage(double rangeStart, double rangeEnd) {
-    if (_chartEntries.isEmpty) return 0.0;
-
-    List<List<double>> ranges = _chartEntries.map((e) {
-      double start = e.startMile < e.endMile ? e.startMile : e.endMile;
-      double end = e.startMile < e.endMile ? e.endMile : e.startMile;
-      return [start, end];
-    }).toList();
-
-    ranges.sort((a, b) => a[0].compareTo(b[0]));
-
-    List<List<double>> merged = [];
-    if (ranges.isNotEmpty) {
-      var current = ranges[0];
-      for (int i = 1; i < ranges.length; i++) {
-        if (ranges[i][0] <= current[1]) {
-          if (ranges[i][1] > current[1]) current[1] = ranges[i][1];
-        } else {
-          merged.add(current);
-          current = ranges[i];
-        }
-      }
-      merged.add(current);
-    }
-
-    double totalCoverage = 0;
-    for (var m in merged) {
-      double overlapStart = m[0] > rangeStart ? m[0] : rangeStart;
-      double overlapEnd = m[1] < rangeEnd ? m[1] : rangeEnd;
-      if (overlapStart < overlapEnd) {
-        totalCoverage += (overlapEnd - overlapStart);
-      }
-    }
-    return totalCoverage;
-  }
-
   int _zeroDays() {
     final Map<String, double> dailyMiles = {};
     for (final e in _filteredChartEntries) {
@@ -977,31 +945,11 @@ class _StatsScreenState extends State<StatsScreen> {
     }
     return dailyMiles.values.where((v) => v == 0).length;
   }
-
-  ProgressData _calculateAdjustedProgress(double rangeStart, double rangeEnd) {
-    final uniqueTrailCoverage = _calculateUniqueCoverage(rangeStart, rangeEnd);
-
-    final relevantEntries = _chartEntries.where((e) =>
-      e.endMile > rangeStart && e.endMile <= rangeEnd).toList();
-
-    final sectionExtra = _includeExtraSkippedMiles
-        ? relevantEntries.fold(0.0, (sum, e) => sum + e.extraMiles)
-        : 0.0;
-    final sectionSkipped = _includeExtraSkippedMiles
-        ? relevantEntries.fold(0.0, (sum, e) => sum + e.skippedMiles)
-        : 0.0;
-
-    double covered = uniqueTrailCoverage + sectionExtra - sectionSkipped;
-    double total = (rangeEnd - rangeStart) - sectionSkipped + sectionExtra;
-
-    return ProgressData(covered, total);
-  }
 }
 
 class ProgressData {
   final double coveredWithExtra;
   final double adjustedTotal;
   ProgressData(this.coveredWithExtra, this.adjustedTotal);
-
   double get percentage => adjustedTotal > 0 ? (coveredWithExtra / adjustedTotal).clamp(0.0, 1.0) : 0.0;
 }
