@@ -28,7 +28,5 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Used to record your location for trail entries</string>
 </dict>
 </plist>

@@ -25,7 +25,7 @@ class Trip {
     required this.name,
     required this.startDate,
     this.startMile = 0.0,
-    this.status = TripStatus.active,
+    this.status = TripStatus.inProgress,
     this.endDate,
     this.tripLength = 0.0,
     double? endMile,
@@ -127,4 +127,4 @@ class Trip {
   }
 }
 
-enum TripStatus { active, paused, completed }
+enum TripStatus { inProgress, completed }

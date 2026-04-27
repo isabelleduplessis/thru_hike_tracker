@@ -49,6 +49,9 @@ class _StatsScreenState extends State<StatsScreen> {
   double _bestWeekMiles = 0;
   int _completedTrips = 0;
 
+  // Progress view mode
+  bool _progressAsTable = false;
+
   // alternateId -> total miles logged on that alternate for current trip
   Map<int, double> _altMilesMap = {};
 
@@ -106,7 +109,7 @@ class _StatsScreenState extends State<StatsScreen> {
     final elevationGain = await _entryRepository.getTotalElevationGainAllTrips();
     final elevationLoss = await _entryRepository.getTotalElevationLossAllTrips();
     final bestWeek = await _entryRepository.getBestRolling7DayMilesAllTrips();
-    final completedTrips = allTrips.where((t) => t.status == "completed").length;
+    final completedTrips = allTrips.where((t) => t.status == TripStatus.completed).length;
 
     setState(() {
       _selectedTrip = null;
@@ -167,7 +170,6 @@ class _StatsScreenState extends State<StatsScreen> {
     _recalculateCustomFieldStats();
   }
 
-  /// Calculates the highest total miles across any rolling 7-day window.
   double _calculateBestRolling7Day(Map<String, double> dailyMiles) {
     if (dailyMiles.isEmpty) return 0.0;
     final sortedDays = dailyMiles.keys.toList()..sort();
@@ -225,6 +227,8 @@ class _StatsScreenState extends State<StatsScreen> {
     _recalculateStats();
   }
 
+  // ── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -237,16 +241,23 @@ class _StatsScreenState extends State<StatsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildTripSelector(),
-                  const SizedBox(height: 12),
-                  _buildToggleRow(),
-                  const SizedBox(height: 8),
+                  // Progress above stats
+                  if (_selectedTrip != null && _selectedTrip!.tripLength > 0) ...[
+                    const SizedBox(height: 8),
+                    _buildProgressSection(),
+                    const SizedBox(height: 16),
+                  ],
                   _buildMainStats(),
                   const SizedBox(height: 16),
                   if (_selectedTrip == null && _allTrips.length > 1) ...[
                     _buildDonutChart(_allTrips, _allTripMiles),
                     const SizedBox(height: 16),
                   ],
-                  if (_selectedTrip != null && _filteredChartEntries.map((e) => e.date.toIso8601String().substring(0, 10)).toSet().length > 1) ...[
+                  if (_selectedTrip != null &&
+                      _filteredChartEntries
+                          .map((e) => e.date.toIso8601String().substring(0, 10))
+                          .toSet()
+                          .length > 1) ...[
                     _buildChartSection(),
                     const SizedBox(height: 16),
                     if (_selectedTrip!.trackElevation) ...[
@@ -254,13 +265,8 @@ class _StatsScreenState extends State<StatsScreen> {
                       const SizedBox(height: 16),
                     ],
                   ],
-                  if (_selectedTrip != null && _selectedTrip!.tripLength > 0) ...[
-                    const Text('Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    _buildOverallProgress(),
-                    _buildSectionBreakdown(),
-                    const SizedBox(height: 16),
-                  ],
+                  const SizedBox(height: 12),
+                  _buildToggleRow(),
                 ],
               ),
             ),
@@ -272,6 +278,7 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _buildToggleRow() {
     if (_selectedTrip == null) return const SizedBox.shrink();
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildCheckboxRow(
           label: 'Include zero days',
@@ -324,9 +331,276 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // ── Progress section ─────────────────────────────────────────────────────
+
+  Widget _buildProgressSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            GestureDetector(
+              onTap: () => setState(() => _progressAsTable = !_progressAsTable),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _progressAsTable
+                        ? PhosphorIconsRegular.chartBar
+                        : PhosphorIconsRegular.table,
+                    size: 14,
+                    color: Colors.grey[500],
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _progressAsTable ? 'Bar' : 'Table',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _progressAsTable ? _buildProgressTable() : _buildProgressBars(),
+      ],
+    );
+  }
+
+  // ── Progress — bar view ──────────────────────────────────────────────────
+
+  Widget _buildProgressBars() {
+    if (_selectedTrip == null) return const SizedBox.shrink();
+    final overallStats = _calculateOverallProgress();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildBaseProgressBar(
+          overallStats.percentage,
+          overallStats.coveredWithExtra,
+          overallStats.adjustedTotal,
+          'All',
+        ),
+        if (_selectedTrip!.sections.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          ..._selectedTrip!.sections.asMap().entries.map((e) {
+            final index = e.key;
+            final section = e.value;
+            final stats = _calculateSectionProgress(section);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: _buildBaseProgressBar(
+                stats.percentage,
+                stats.coveredWithExtra,
+                stats.adjustedTotal,
+                section.name,
+                color: sectionColor(_selectedTrip!.id!, index),
+              ),
+            );
+          }).toList(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBaseProgressBar(
+    double progress,
+    double completed,
+    double total,
+    String label, {
+    Color? color,
+  }) {
+    final barColor = color ?? Theme.of(context).colorScheme.primary;
+    final remaining = (total - completed).clamp(0.0, double.infinity);
+    final percentText = '${(progress * 100).toStringAsFixed(1)}%';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12)),
+          const SizedBox(height: 2),
+          Container(
+            height: 18,
+            decoration: BoxDecoration(
+              border: Border.all(color: barColor, width: 1.2),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              children: [
+                FractionallySizedBox(
+                  widthFactor: progress.clamp(0.0, 1.0),
+                  heightFactor: 1.0,
+                  alignment: Alignment.centerLeft,
+                  child: Container(color: barColor.withOpacity(0.25)),
+                ),
+                Center(
+                  child: Text(
+                    percentText,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: barColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${_settings.formatDistance(completed)} / ${_settings.formatDistance(total)}',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+          ),
+          Text(
+            '${_settings.formatDistance(remaining)} remaining',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Progress — table view ────────────────────────────────────────────────
+
+  Widget _buildProgressTable() {
+    if (_selectedTrip == null) return const SizedBox.shrink();
+
+    final overallStats = _calculateOverallProgress();
+
+    final rows = <_ProgressRow>[
+      _ProgressRow(
+        label: 'All',
+        color: Theme.of(context).colorScheme.primary,
+        stats: overallStats,
+        isOverall: true,
+      ),
+      ..._selectedTrip!.sections.asMap().entries.map((e) => _ProgressRow(
+        label: e.value.name,
+        color: sectionColor(_selectedTrip!.id!, e.key),
+        stats: _calculateSectionProgress(e.value),
+        isOverall: false,
+      )),
+    ];
+
+    final headerStyle = TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[600]);
+    const cellStyle = TextStyle(fontSize: 11);
+    const boldCell = TextStyle(fontSize: 11, fontWeight: FontWeight.bold);
+
+    // Extract unit label from a sample formatted distance (e.g. "12.3 mi" → "mi")
+    final sampleDistance = _settings.formatDistance(1.0);
+    final unitLabel = sampleDistance.contains(' ') ? sampleDistance.split(' ').last : '';
+
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(2.2),
+        1: FlexColumnWidth(1.8),
+        2: FlexColumnWidth(1.3),
+        3: FlexColumnWidth(1.3),
+        4: FlexColumnWidth(1.3),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        TableRow(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1)),
+          ),
+          children: [
+            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('Section', style: headerStyle)),
+            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('Progress', style: headerStyle)),
+            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(unitLabel.isNotEmpty ? 'Completed ($unitLabel)' : 'Done', style: headerStyle, textAlign: TextAlign.right)),
+            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(unitLabel.isNotEmpty ? 'Remaining ($unitLabel)' : 'Left', style: headerStyle, textAlign: TextAlign.right)),
+            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(unitLabel.isNotEmpty ? 'Total ($unitLabel)' : 'Total', style: headerStyle, textAlign: TextAlign.right)),
+          ],
+        ),
+        ...rows.map((row) {
+          final pct = (row.stats.percentage * 100).toStringAsFixed(1);
+          final pctLabel = '$pct%';
+
+          // Strip units from distance values since they're now in the header
+          String stripUnit(String formatted) {
+            if (unitLabel.isNotEmpty && formatted.endsWith(' $unitLabel')) {
+              return formatted.substring(0, formatted.length - unitLabel.length - 1);
+            }
+            return formatted;
+          }
+
+          final done = stripUnit(_settings.formatDistance(row.stats.coveredWithExtra));
+          final left = stripUnit(_settings.formatDistance(
+            (row.stats.adjustedTotal - row.stats.coveredWithExtra).clamp(0.0, double.infinity),
+          ));
+          final total = stripUnit(_settings.formatDistance(row.stats.adjustedTotal));
+          final ts = row.isOverall ? boldCell : cellStyle;
+
+          return TableRow(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade100, width: 1)),
+            ),
+            children: [
+              // Section label — dot removed
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(row.label, style: ts, overflow: TextOverflow.ellipsis),
+              ),
+              // % column — color-coded outlined bar filled to percent
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final fillFraction = row.stats.percentage.clamp(0.0, 1.0);
+                    return Container(
+                      height: 14,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: row.color, width: 1.2),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Stack(
+                        children: [
+                          // Filled portion
+                          FractionallySizedBox(
+                            widthFactor: fillFraction,
+                            heightFactor: 1.0,
+                            alignment: Alignment.centerLeft,
+                            child: Container(color: row.color.withOpacity(0.25)),
+                          ),
+                          // Percent label centered in bar
+                          Center(
+                            child: Text(
+                              pctLabel,
+                              style: TextStyle(
+                                fontSize: 8.5,
+                                fontWeight: row.isOverall ? FontWeight.bold : FontWeight.normal,
+                                color: row.color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(done, style: cellStyle, textAlign: TextAlign.right)),
+              Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(left, style: cellStyle, textAlign: TextAlign.right)),
+              Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(total, style: cellStyle, textAlign: TextAlign.right)),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
   // ── Stat cards ───────────────────────────────────────────────────────────
 
   Widget _buildMainStats() {
+    final hasElevLoss = _totalElevationLoss > 0;
+
     return Column(
       children: [
         _buildStatCard('Total Distance', _settings.formatDistance(_totalMiles), PhosphorIconsRegular.path, Colors.green),
@@ -342,9 +616,10 @@ class _StatsScreenState extends State<StatsScreen> {
           _buildStatCard('Best 7-Day', _settings.formatDistance(_bestWeekMiles), PhosphorIconsRegular.calendarCheck, Colors.teal),
         if (_selectedTrip != null && _selectedTrip!.neroThreshold != null)
           _buildStatCard('Nero Days', _neroDays.toString(), PhosphorIconsRegular.personSimpleWalk, Colors.amber),
-        if (_totalElevationGain > 0 || _totalElevationLoss > 0) ...[
+        if (_totalElevationGain > 0) ...[
           _buildStatCard('Total Gain', _settings.formatElevation(_totalElevationGain), PhosphorIconsRegular.arrowUp, Colors.green),
-          _buildStatCard('Total Loss', _settings.formatElevation(_totalElevationLoss), PhosphorIconsRegular.arrowDown, Colors.red),
+          if (hasElevLoss)
+            _buildStatCard('Total Loss', _settings.formatElevation(_totalElevationLoss), PhosphorIconsRegular.arrowDown, Colors.red),
         ],
         if (_customFieldStats.isNotEmpty)
           ..._customFieldStats.map((stat) => _buildStatCard(
@@ -360,7 +635,8 @@ class _StatsScreenState extends State<StatsScreen> {
             _longestTrip != null
                 ? '${_longestTrip!.name}  ${_settings.formatDistance(_longestTripMiles)}'
                 : '-',
-            PhosphorIconsRegular.mountains, Colors.indigo,
+            PhosphorIconsRegular.mountains,
+            Colors.indigo,
           ),
           _buildCompletedTripsCard(),
         ],
@@ -435,7 +711,10 @@ class _StatsScreenState extends State<StatsScreen> {
       children: [
         const Text('Daily Distance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
-        if (_filteredChartEntries.map((e) => e.date.toIso8601String().substring(0, 10)).toSet().length > 1)
+        if (_filteredChartEntries
+            .map((e) => e.date.toIso8601String().substring(0, 10))
+            .toSet()
+            .length > 1)
           SizedBox(height: 260, child: _buildLineChart())
         else
           const Center(
@@ -590,10 +869,10 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _buildElevationChartSection() {
     if (_selectedTrip == null) return const SizedBox.shrink();
 
-    // Build daily gain/loss sums using the same day-number logic as the mileage chart
     final entries = _filteredChartEntries
-        .where((e) => (e.elevationGain != null && e.elevationGain! != 0) ||
-                      (e.elevationLoss != null && e.elevationLoss! != 0))
+        .where((e) =>
+            (e.elevationGain != null && e.elevationGain! != 0) ||
+            (e.elevationLoss != null && e.elevationLoss! != 0))
         .toList();
 
     if (entries.length < 2) return const SizedBox.shrink();
@@ -609,7 +888,8 @@ class _StatsScreenState extends State<StatsScreen> {
     final sortedDays = dailyGain.keys.toList()..sort();
     if (sortedDays.length < 2) return const SizedBox.shrink();
 
-    // Reuse the exact same day-number calculation
+    final hasAnyLoss = dailyLoss.values.any((v) => v > 0);
+
     final dayNums = calculateDayNumbers(_filteredChartEntries, _selectedTrip!.startDate);
     final dateToDayNum = <String, int>{};
     for (final entry in _filteredChartEntries) {
@@ -624,8 +904,9 @@ class _StatsScreenState extends State<StatsScreen> {
       if (dayNum == null) continue;
       final x = dayNum.toDouble();
       gainSpots.add(FlSpot(x, _settings.convertToDisplayElevation(dailyGain[day]!)));
-      // Loss is stored as positive; render below zero
-      lossSpots.add(FlSpot(x, -_settings.convertToDisplayElevation(dailyLoss[day]!.abs())));
+      if (hasAnyLoss) {
+        lossSpots.add(FlSpot(x, -_settings.convertToDisplayElevation(dailyLoss[day]!.abs())));
+      }
     }
 
     final allDayNums = dateToDayNum.values.toList()..sort();
@@ -645,6 +926,36 @@ class _StatsScreenState extends State<StatsScreen> {
     final yAbsMax = ((rawMax / 500).ceil() * 500).toDouble().clamp(500.0, double.infinity);
     final yInterval = yAbsMax <= 2000 ? 500.0 : (yAbsMax / 4).ceilToDouble();
 
+    final lineBars = <LineChartBarData>[
+      LineChartBarData(
+        spots: gainSpots,
+        isCurved: false,
+        color: Colors.green,
+        barWidth: 2.5,
+        dotData: const FlDotData(show: false),
+        belowBarData: BarAreaData(
+          show: true,
+          cutOffY: 0,
+          applyCutOffY: true,
+          color: Colors.green.withOpacity(0.15),
+        ),
+      ),
+      if (hasAnyLoss)
+        LineChartBarData(
+          spots: lossSpots,
+          isCurved: false,
+          color: Colors.red,
+          barWidth: 2.5,
+          dotData: const FlDotData(show: false),
+          aboveBarData: BarAreaData(
+            show: true,
+            cutOffY: 0,
+            applyCutOffY: true,
+            color: Colors.red.withOpacity(0.15),
+          ),
+        ),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -655,10 +966,12 @@ class _StatsScreenState extends State<StatsScreen> {
             _elevLegendDot(Colors.green),
             const SizedBox(width: 4),
             Text('Gain', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-            const SizedBox(width: 12),
-            _elevLegendDot(Colors.red),
-            const SizedBox(width: 4),
-            Text('Loss', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+            if (hasAnyLoss) ...[
+              const SizedBox(width: 12),
+              _elevLegendDot(Colors.red),
+              const SizedBox(width: 4),
+              Text('Loss', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+            ],
           ],
         ),
         const SizedBox(height: 8),
@@ -668,7 +981,7 @@ class _StatsScreenState extends State<StatsScreen> {
             LineChartData(
               minX: firstDay,
               maxX: lastDay,
-              minY: -yAbsMax,
+              minY: hasAnyLoss ? -yAbsMax : 0,
               maxY: yAbsMax,
               gridData: FlGridData(
                 show: true,
@@ -693,7 +1006,8 @@ class _StatsScreenState extends State<StatsScreen> {
               ),
               titlesData: FlTitlesData(
                 bottomTitles: AxisTitles(
-                  axisNameWidget: const Text('Day', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  axisNameWidget: const Text('Day',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   sideTitles: SideTitles(
                     showTitles: true,
                     interval: xGridInterval,
@@ -715,43 +1029,15 @@ class _StatsScreenState extends State<StatsScreen> {
                     interval: yInterval,
                     reservedSize: 45,
                     getTitlesWidget: (value, meta) {
-                      return Text(value.toInt().toString(), style: const TextStyle(fontSize: 9));
+                      return Text(value.toInt().toString(),
+                          style: const TextStyle(fontSize: 9));
                     },
                   ),
                 ),
                 topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
               ),
-              lineBarsData: [
-                // Gain — green, above zero
-                LineChartBarData(
-                  spots: gainSpots,
-                  isCurved: false,
-                  color: Colors.green,
-                  barWidth: 2.5,
-                  dotData: const FlDotData(show: false),
-                  belowBarData: BarAreaData(
-                    show: true,
-                    cutOffY: 0,
-                    applyCutOffY: true,
-                    color: Colors.green.withOpacity(0.15),
-                  ),
-                ),
-                // Loss — red, below zero
-                LineChartBarData(
-                  spots: lossSpots,
-                  isCurved: false,
-                  color: Colors.red,
-                  barWidth: 2.5,
-                  dotData: const FlDotData(show: false),
-                  aboveBarData: BarAreaData(
-                    show: true,
-                    cutOffY: 0,
-                    applyCutOffY: true,
-                    color: Colors.red.withOpacity(0.15),
-                  ),
-                ),
-              ],
+              lineBarsData: lineBars,
               lineTouchData: LineTouchData(
                 touchTooltipData: LineTouchTooltipData(
                   getTooltipItems: (touchedSpots) {
@@ -769,10 +1055,7 @@ class _StatsScreenState extends State<StatsScreen> {
                       final date = DateTime.parse(dateStr);
                       return LineTooltipItem(
                         'Day $dayNum\n${isGain ? "Gain" : "Loss"}: ${_settings.formatElevation(rawVal)}\n${DateFormat('M/d').format(date)}',
-                        TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
+                        const TextStyle(color: Colors.white, fontSize: 12),
                       );
                     }).toList();
                   },
@@ -787,8 +1070,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _elevLegendDot(Color color) {
     return Container(
-      width: 10,
-      height: 10,
+      width: 10, height: 10,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
@@ -956,127 +1238,6 @@ class _StatsScreenState extends State<StatsScreen> {
     return ProgressData(numerator, denominator);
   }
 
-  // ── Progress widgets ─────────────────────────────────────────────────────
-
-  Widget _buildOverallProgress() {
-    if (_selectedTrip == null) return const SizedBox.shrink();
-    final stats = _calculateOverallProgress();
-    return _buildBaseProgressBar(
-      stats.percentage,
-      stats.coveredWithExtra,
-      stats.adjustedTotal,
-      'Overall Progress',
-    );
-  }
-
-  Widget _buildSectionBreakdown() {
-    if (_selectedTrip == null || _selectedTrip!.sections.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(padding: EdgeInsets.only(top: 16, bottom: 8)),
-        ..._selectedTrip!.sections.asMap().entries.map((e) {
-          final index = e.key;
-          final section = e.value;
-          final stats = _calculateSectionProgress(section);
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _buildBaseProgressBar(
-              stats.percentage,
-              stats.coveredWithExtra,
-              stats.adjustedTotal,
-              section.name,
-              color: sectionColor(_selectedTrip!.id!, index),
-            ),
-          );
-        }).toList(),
-      ],
-    );
-  }
-
-  Widget _buildBaseProgressBar(double progress, double completed, double total, String label, {Color? color}) {
-    final barColor = color ?? Theme.of(context).colorScheme.primary;
-    final remaining = (total - completed).clamp(0.0, double.infinity);
-    final percentText = '${(progress * 100).toStringAsFixed(1)}%';
-    final isOverall = label == 'Overall Progress';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: isOverall ? 13 : 12,
-                fontWeight: isOverall ? FontWeight.bold : FontWeight.normal,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final barWidth = constraints.maxWidth;
-                    final fillWidth = (progress * barWidth).clamp(0.0, barWidth);
-                    final showTextInside = fillWidth > 50;
-
-                    return Stack(
-                      alignment: Alignment.centerLeft,
-                      children: [
-                        Container(
-                          height: 18,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                        Container(
-                          height: 18,
-                          width: fillWidth,
-                          decoration: BoxDecoration(
-                            color: barColor,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                        Positioned(
-                          left: showTextInside ? (fillWidth - 48) : (fillWidth + 6),
-                          child: Text(
-                            percentText,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: showTextInside ? Colors.white : barColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_settings.formatDistance(completed)} / ${_settings.formatDistance(total)}  •  ${_settings.formatDistance(remaining)} remaining',
-                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Donut chart ──────────────────────────────────────────────────────────
 
   Widget _buildDonutChart(List<Trip> trips, List<double> miles) {
@@ -1133,7 +1294,8 @@ class _StatsScreenState extends State<StatsScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(e.value.name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                        Text(e.value.name, style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis),
                       ],
                     ),
                   );
@@ -1158,9 +1320,25 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 }
 
+// ── Supporting types ──────────────────────────────────────────────────────────
+
 class ProgressData {
   final double coveredWithExtra;
   final double adjustedTotal;
   ProgressData(this.coveredWithExtra, this.adjustedTotal);
-  double get percentage => adjustedTotal > 0 ? (coveredWithExtra / adjustedTotal).clamp(0.0, 1.0) : 0.0;
+  double get percentage =>
+      adjustedTotal > 0 ? (coveredWithExtra / adjustedTotal).clamp(0.0, 1.0) : 0.0;
+}
+
+class _ProgressRow {
+  final String label;
+  final Color color;
+  final ProgressData stats;
+  final bool isOverall;
+  _ProgressRow({
+    required this.label,
+    required this.color,
+    required this.stats,
+    required this.isOverall,
+  });
 }

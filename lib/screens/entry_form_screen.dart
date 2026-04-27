@@ -49,7 +49,8 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   final _notesController = TextEditingController();
   final _elevationGainController = TextEditingController();
   final _elevationLossController = TextEditingController();
-  final _sectionController = TextEditingController();
+  final _latitudeController = TextEditingController();
+  final _longitudeController = TextEditingController();
 
   DateTime _selectedDate = DateTime.now();
   Direction? _selectedDirection;
@@ -62,26 +63,34 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   Map<int, bool> _customFieldYesNo = {};
   Map<int, int> _customFieldRatings = {};
 
-  double? _latitude;
-  double? _longitude;
   bool _isFetchingLocation = false;
 
   bool get _isOnAlternate => _selectedAlternateId != null;
 
-  InputDecoration _slimDecoration(String label, {String? suffixText}) {
+  static const _labelStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
+  static const _fieldTextStyle = TextStyle(fontSize: 13);
+
+  InputDecoration _slimDecoration({String? suffixText, String? hintText}) {
     return InputDecoration(
-      labelText: label,
       suffixText: suffixText,
+      hintText: hintText,
       border: const OutlineInputBorder(),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       isDense: true,
     );
   }
 
-  Theme _quietExpansion({required Widget child}) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: child,
+  Widget _fieldRow(String label, Widget field) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: _labelStyle),
+          const SizedBox(height: 4),
+          field,
+        ],
+      ),
     );
   }
 
@@ -100,14 +109,10 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       _selectedDirection = entry.direction;
       _isTent = entry.tentOrShelter;
       _hadShower = entry.shower ?? false;
-      _latitude = entry.latitude;
-      _longitude = entry.longitude;
       _selectedAlternateId = entry.alternateId;
 
-      // Only determine section if not on an alternate
-      if (entry.alternateId == null) {
-        _sectionController.text = _determineSection(entry.endMile);
-      }
+      if (entry.latitude != null) _latitudeController.text = entry.latitude!.toStringAsFixed(5);
+      if (entry.longitude != null) _longitudeController.text = entry.longitude!.toStringAsFixed(5);
 
       _startMileController.text = _settings.convertToDisplayUnit(entry.startMile).toStringAsFixed(2);
       _endMileController.text = _settings.convertToDisplayUnit(entry.endMile).toStringAsFixed(2);
@@ -131,17 +136,13 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
 
   Future<void> _loadAlternates() async {
     final alternates = await _tripRepository.getIncompleteAlternatesForTrip(widget.trip.id!);
-
-    // If editing an entry that's on a completed alternate, include that alternate too
     if (widget.entry?.alternateId != null) {
       final alreadyIncluded = alternates.any((a) => a.id == widget.entry!.alternateId);
       if (!alreadyIncluded) {
-        final allAlternates = widget.trip.alternates;
-        final current = allAlternates.where((a) => a.id == widget.entry!.alternateId).toList();
+        final current = widget.trip.alternates.where((a) => a.id == widget.entry!.alternateId).toList();
         alternates.addAll(current);
       }
     }
-
     if (mounted) setState(() => _availableAlternates = alternates);
   }
 
@@ -186,9 +187,10 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     _skippedMilesController.dispose();
     _locationController.dispose();
     _notesController.dispose();
-    _sectionController.dispose();
     _elevationGainController.dispose();
     _elevationLossController.dispose();
+    _latitudeController.dispose();
+    _longitudeController.dispose();
     for (var c in _customFieldControllers.values) c.dispose();
     super.dispose();
   }
@@ -227,13 +229,18 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.deniedForever) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Location permission permanently denied. Enable it in Settings.')),
         );
+        }
         return;
       }
       final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      setState(() { _latitude = position.latitude; _longitude = position.longitude; });
+      setState(() {
+        _latitudeController.text = position.latitude.toStringAsFixed(5);
+        _longitudeController.text = position.longitude.toStringAsFixed(5);
+      });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not get location: $e')));
     } finally {
@@ -241,58 +248,19 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     }
   }
 
-  Future<void> _enterCoordinatesManually() async {
-    final latController = TextEditingController(text: _latitude?.toString() ?? '');
-    final lngController = TextEditingController(text: _longitude?.toString() ?? '');
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Enter Coordinates'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: latController,
-              decoration: const InputDecoration(labelText: 'Latitude', hintText: 'e.g. 37.12345', border: OutlineInputBorder()),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: lngController,
-              decoration: const InputDecoration(labelText: 'Longitude', hintText: 'e.g. -119.12345', border: OutlineInputBorder()),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              final lat = double.tryParse(latController.text);
-              final lng = double.tryParse(lngController.text);
-              if (lat != null && lng != null) {
-                setState(() { _latitude = lat; _longitude = lng; });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _saveEntry() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
+      final lat = double.tryParse(_latitudeController.text);
+      final lng = double.tryParse(_longitudeController.text);
+
       final entry = Entry(
         id: widget.entry?.id,
         tripId: widget.trip.id!,
         date: _selectedDate,
         startMile: _settings.convertFromDisplayUnit(double.parse(_startMileController.text)),
         endMile: _settings.convertFromDisplayUnit(double.parse(_endMileController.text)),
-        // Force 0 for extra/skipped when on alternate
         extraMiles: _isOnAlternate ? 0.0 : _settings.convertFromDisplayUnit(double.tryParse(_extraMilesController.text) ?? 0.0),
         skippedMiles: _isOnAlternate ? 0.0 : _settings.convertFromDisplayUnit(double.tryParse(_skippedMilesController.text) ?? 0.0),
         elevationGain: _elevationGainController.text.isNotEmpty
@@ -306,8 +274,8 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
         shower: _hadShower,
         notes: _notesController.text,
         direction: _selectedDirection,
-        latitude: _latitude,
-        longitude: _longitude,
+        latitude: lat,
+        longitude: lng,
         alternateId: _selectedAlternateId,
       );
 
@@ -373,13 +341,6 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     }
   }
 
-  String _determineSection(double mile) {
-    for (var section in widget.trip.sections) {
-      if (mile >= section.startMile && mile <= section.endMile) return section.name;
-    }
-    return '';
-  }
-
   Future<void> _pickDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -395,326 +356,428 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final unit = _settings.getDistanceUnitLabel() == 'km' ? 'KM' : 'Mile';
     final distUnit = _settings.getDistanceUnitLabel();
     final elevUnit = _settings.getElevationUnitLabel();
+    final isEditing = widget.entry != null;
+    final theme = Theme.of(context);
+
+    // Force dropdown text to use normal on-surface color regardless of theme
+    final dropdownTheme = theme.copyWith(
+      textTheme: theme.textTheme.apply(bodyColor: theme.colorScheme.onSurface),
+    );
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.entry == null ? 'New Entry' : 'Edit Entry'),
-        actions: widget.entry != null
-            ? [IconButton(icon: const Icon(Icons.delete), onPressed: _deleteEntry, tooltip: 'Delete Entry')]
-            : null,
+        title: Text(isEditing ? 'Edit Entry' : 'New Entry'),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
-
             // ── Date ─────────────────────────────────────────────────
-            InkWell(
+            _fieldRow('Date', InkWell(
               onTap: _pickDate,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.calendar_today, size: 15),
-                    const SizedBox(width: 6),
-                    Text(
-                      DateFormat.yMMMd().format(_selectedDate),
-                      style: const TextStyle(fontSize: 15),
-                    ),
+                    const Icon(Icons.calendar_today, size: 14),
+                    const SizedBox(width: 8),
+                    Text(DateFormat.yMMMd().format(_selectedDate), style: _fieldTextStyle),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
+            )),
 
-            // ── Direction + Section ───────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<Direction>(
-                    decoration: _slimDecoration('Direction'),
-                    value: _selectedDirection,
-                    items: Direction.values.map((d) => DropdownMenuItem(
-                      value: d,
-                      child: Text(d.toString().split('.').last),
-                    )).toList(),
-                    onChanged: (value) => setState(() => _selectedDirection = value),
+            // ── Direction ─────────────────────────────────────────────
+            _fieldRow('Direction', Theme(
+              data: dropdownTheme,
+              child: DropdownButtonFormField<Direction>(
+                decoration: _slimDecoration(),
+                style: _fieldTextStyle.copyWith(color: theme.colorScheme.onSurface),
+                value: _selectedDirection,
+                items: Direction.values.map((d) => DropdownMenuItem(
+                  value: d,
+                  child: Text(d.toString().split('.').last),
+                )).toList(),
+                onChanged: (value) => setState(() => _selectedDirection = value),
+              ),
+            )),
+
+            // ── Start / End ───────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Start', style: _labelStyle),
+                        const SizedBox(height: 4),
+                        TextFormField(
+                          controller: _startMileController,
+                          style: _fieldTextStyle,
+                          cursorHeight: 14,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: _slimDecoration(suffixText: distUnit),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Required';
+                            if (double.tryParse(v) == null) return 'Invalid';
+                            return null;
+                          },
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                if (widget.trip.sections.isNotEmpty && !_isOnAlternate) ...[
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextFormField(
-                      controller: _sectionController,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: 'Section',
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        isDense: true,
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('End', style: _labelStyle),
+                        const SizedBox(height: 4),
+                        TextFormField(
+                          controller: _endMileController,
+                          style: _fieldTextStyle,
+                          cursorHeight: 14,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: _slimDecoration(suffixText: distUnit),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Required';
+                            if (double.tryParse(v) == null) return 'Invalid';
+                            return null;
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Added / Skipped ───────────────────────────────────────
+            if (!_isOnAlternate)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Added', style: _labelStyle),
+                          const SizedBox(height: 4),
+                          TextFormField(
+                            controller: _extraMilesController,
+                            style: _fieldTextStyle,
+                            cursorHeight: 14,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _slimDecoration(suffixText: distUnit),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // ── Alternate Route selector ───────────────────────────────
-            if (_availableAlternates.isNotEmpty) ...[
-              DropdownButtonFormField<int?>(
-                decoration: _slimDecoration('Alternate Route'),
-                value: _selectedAlternateId,
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('None'),
-                  ),
-                  ..._availableAlternates.map((alt) => DropdownMenuItem<int?>(
-                    value: alt.id,
-                    child: Text(alt.name),
-                  )),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedAlternateId = value;
-                    // Clear section when switching to alternate
-                    if (value != null) {
-                      _sectionController.text = '';
-                      _startMileController.text = '0.00';
-                      _endMileController.text = '0.00';
-                    }
-                  });
-                },
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Skipped', style: _labelStyle),
+                          const SizedBox(height: 4),
+                          TextFormField(
+                            controller: _skippedMilesController,
+                            style: _fieldTextStyle,
+                            cursorHeight: 14,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _slimDecoration(suffixText: distUnit),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 10),
+
+            // ── Elevation ─────────────────────────────────────────────
+            // ── Elevation ─────────────────────────────────────────────
+            if (widget.trip.trackElevation)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Elev Gain', style: _labelStyle),
+                          const SizedBox(height: 4),
+                          TextFormField(
+                            controller: _elevationGainController,
+                            style: _fieldTextStyle,
+                            cursorHeight: 14,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _slimDecoration(suffixText: elevUnit),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Elev Loss', style: _labelStyle),
+                          const SizedBox(height: 4),
+                          TextFormField(
+                            controller: _elevationLossController,
+                            style: _fieldTextStyle,
+                            cursorHeight: 14,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: _slimDecoration(suffixText: elevUnit),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            // ── Coordinates ───────────────────────────────────────────
+            // ── Coordinates ───────────────────────────────────────────
+            if (widget.trip.trackCoordinates) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text('Coordinates', style: _labelStyle),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 26,
+                          child: OutlinedButton(
+                          onPressed: _isFetchingLocation ? null : _fetchLocation,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.all(4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          child: _isFetchingLocation
+                            ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.my_location, size: 13),
+                          ),
+                        ),
+                        if (_latitudeController.text.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            height: 26,
+                            child: OutlinedButton.icon(
+                              onPressed: () => setState(() {
+                                _latitudeController.clear();
+                                _longitudeController.clear();
+                              }),
+                              icon: const Icon(Icons.clear, size: 13),
+                              label: const Text('Clear', style: TextStyle(fontSize: 11)),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                                foregroundColor: Colors.grey[600],
+                                side: BorderSide(color: Colors.grey.shade400),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _latitudeController,
+                            style: _fieldTextStyle,
+                            cursorHeight: 14,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                            decoration: _slimDecoration(hintText: 'Latitude'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _longitudeController,
+                            style: _fieldTextStyle,
+                            cursorHeight: 14,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                            decoration: _slimDecoration(hintText: 'Longitude'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
 
-            // ── Start / End mile ──────────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _startMileController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _slimDecoration(
-                      _isOnAlternate ? 'Alternate Start' : 'Start $unit',
+            // ── Alternate Route ───────────────────────────────────────
+            if (_availableAlternates.isNotEmpty)
+              _fieldRow('Alternate Route', Theme(
+                data: dropdownTheme,
+                child: DropdownButtonFormField<int?>(
+                  decoration: _slimDecoration(),
+                  style: _fieldTextStyle.copyWith(color: theme.colorScheme.onSurface),
+                  value: _selectedAlternateId,
+                  items: [
+                    DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('None', style: _fieldTextStyle.copyWith(color: theme.colorScheme.onSurface)),
                     ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Required';
-                      if (double.tryParse(v) == null) return 'Invalid';
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _endMileController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _slimDecoration(
-                      _isOnAlternate ? 'Alternate End' : 'End $unit',
-                    ),
-                    onChanged: (value) {
-                      if (!_isOnAlternate) {
-                        final inputMile = double.tryParse(value);
-                        if (inputMile != null) {
-                          final baseMile = _settings.convertFromDisplayUnit(inputMile);
-                          setState(() => _sectionController.text = _determineSection(baseMile));
-                        }
+                    ..._availableAlternates.map((alt) => DropdownMenuItem<int?>(
+                      value: alt.id,
+                      child: Text(alt.name),
+                    )),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedAlternateId = value;
+                      if (value != null) {
+                        _startMileController.text = '0.00';
+                        _endMileController.text = '0.00';
                       }
-                    },
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Required';
-                      if (double.tryParse(v) == null) return 'Invalid';
-                      return null;
-                    },
-                  ),
+                    });
+                  },
                 ),
-              ],
-            ),
+              )),
 
-            // ── More (optional fields) ────────────────────────────────
-            const SizedBox(height: 6),
-            _quietExpansion(
-              child: ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                title: const Text('Advanced', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                children: [
-                  const SizedBox(height: 4),
-                  // Hide +/- distance when on alternate
-                  if (!_isOnAlternate) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _extraMilesController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: _slimDecoration('+ Distance', suffixText: distUnit),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _skippedMilesController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: _slimDecoration('- Distance', suffixText: distUnit),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (widget.trip.trackElevation) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _elevationGainController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: _slimDecoration('Elevation Gain', suffixText: elevUnit),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _elevationLossController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: _slimDecoration('Elevation Loss', suffixText: elevUnit),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (widget.trip.trackCoordinates) ...[
-                    _buildCoordinatesRow(),
-                    const SizedBox(height: 10),
-                  ],
-                  if (widget.trip.trackSleeping) ...[
-                    _buildTentShelterToggle(),
-                    const SizedBox(height: 8),
-                  ],
-                  if (widget.trip.trackShower) ...[
-                    _buildShowerSwitch(),
-                    const SizedBox(height: 4),
-                  ],
-                ],
-              ),
-            ),
+            // ── Sleeping ──────────────────────────────────────────────
+            if (widget.trip.trackSleeping)
+              _fieldRow('Sleeping', _buildTentShelterToggle()),
+
+            // ── Shower ────────────────────────────────────────────────
+            if (widget.trip.trackShower)
+              _fieldRow('Shower', _buildShowerSwitch()),
 
             // ── Custom Fields ─────────────────────────────────────────
             if (_customFields.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              _quietExpansion(
-                child: ExpansionTile(
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                  title: const Text('Custom Fields', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                  initiallyExpanded: true,
-                  childrenPadding: const EdgeInsets.only(bottom: 4),
-                  children: [
-                    const SizedBox(height: 4),
-                    ..._customFields.map((fwv) => _buildCustomFieldInput(fwv.field)),
-                  ],
-                ),
-              ),
+              ..._customFields.map((fwv) => _buildCustomFieldInput(fwv.field)),
+              const SizedBox(height: 4),
             ],
 
             // ── Gear ──────────────────────────────────────────────────
             if (_availableGear.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              _quietExpansion(
-                child: ExpansionTile(
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                  title: const Text('Gear', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                  initiallyExpanded: false,
-                  childrenPadding: const EdgeInsets.only(bottom: 4),
-                  children: _availableGear.map((gear) {
-                    final isSelected = _selectedGearIds.contains(gear.id);
-                    return InkWell(
-                      onTap: () {
-                        setState(() {
-                          if (isSelected) {
-                            _selectedGearIds.remove(gear.id);
-                          } else {
-                            _selectedGearIds.add(gear.id!);
-                          }
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: Checkbox(
-                                value: isSelected,
-                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                onChanged: (val) {
-                                  setState(() {
-                                    if (val == true) {
-                                      _selectedGearIds.add(gear.id!);
-                                    } else {
-                                      _selectedGearIds.remove(gear.id);
-                                    }
-                                  });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(gear.name, style: const TextStyle(fontSize: 14)),
-                            if (gear.category != null) ...[
-                              const SizedBox(width: 6),
-                              Text(gear.category!, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text('Gear', style: _labelStyle),
               ),
+              ..._availableGear.map((gear) {
+                final isSelected = _selectedGearIds.contains(gear.id);
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) {
+                        _selectedGearIds.remove(gear.id);
+                      } else {
+                        _selectedGearIds.add(gear.id!);
+                      }
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: Checkbox(
+                            value: isSelected,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _selectedGearIds.add(gear.id!);
+                                } else {
+                                  _selectedGearIds.remove(gear.id);
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(gear.name, style: _fieldTextStyle),
+                        if (gear.category != null) ...[
+                          const SizedBox(width: 6),
+                          Text(gear.category!, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 10),
             ],
 
-            const SizedBox(height: 10),
-
             // ── Notes ─────────────────────────────────────────────────
+            Text('Notes', style: _labelStyle),
+            const SizedBox(height: 4),
             TextFormField(
               controller: _notesController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Notes',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                isDense: true,
-                alignLabelWithHint: true,
-              ),
+              maxLines: 6,
+              style: _fieldTextStyle,
+              cursorHeight: 14,
+              decoration: _slimDecoration(),
             ),
+
             const SizedBox(height: 16),
 
-            // ── Save ──────────────────────────────────────────────────
-            FilledButton(
-              onPressed: _isSaving ? null : _saveEntry,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: _isSaving
-                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text(
-                        widget.entry == null ? 'Create Entry' : 'Update Entry',
-                        style: const TextStyle(fontSize: 15),
+            // ── Save / Delete ─────────────────────────────────────────
+            if (isEditing)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving ? null : _deleteEntry,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
+                      child: const Text('Delete Entry', style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _isSaving ? null : _saveEntry,
+                      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
+                      child: _isSaving
+                          ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Save Entry', style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                ],
+              )
+            else
+              FilledButton(
+                onPressed: _isSaving ? null : _saveEntry,
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
+                child: _isSaving
+                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Create Entry', style: TextStyle(fontSize: 13)),
               ),
-            ),
+
             const SizedBox(height: 16),
           ],
         ),
@@ -722,128 +785,62 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     );
   }
 
-  Widget _buildCoordinatesRow() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Coordinates', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                _latitude != null && _longitude != null
-                    ? '${_latitude!.toStringAsFixed(5)}, ${_longitude!.toStringAsFixed(5)}'
-                    : 'No coordinates set',
-                style: TextStyle(fontSize: 13, color: _latitude != null ? null : Colors.grey),
-              ),
-            ),
-            _isFetchingLocation
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : IconButton(
-                    icon: const Icon(Icons.my_location, size: 20),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Fetch location',
-                    onPressed: _fetchLocation,
-                  ),
-            const SizedBox(width: 12),
-            IconButton(
-              icon: const Icon(Icons.edit, size: 20),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              tooltip: 'Enter manually',
-              onPressed: _enterCoordinatesManually,
-            ),
-            if (_latitude != null) ...[
-              const SizedBox(width: 12),
-              IconButton(
-                icon: const Icon(Icons.clear, size: 20),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Clear',
-                onPressed: () => setState(() { _latitude = null; _longitude = null; }),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
   Widget _buildTentShelterToggle() {
-    return Row(
-      children: [
-        const Text('Sleeping:', style: TextStyle(fontSize: 14)),
-        const SizedBox(width: 12),
-        ToggleButtons(
-          isSelected: [_isTent == true, _isTent == false],
-          onPressed: (index) => setState(() => _isTent = index == 0 ? true : false),
-          constraints: const BoxConstraints(minHeight: 32, minWidth: 64),
-          children: const [
-            Text('Tent', style: TextStyle(fontSize: 13)),
-            Text('Shelter', style: TextStyle(fontSize: 13)),
-          ],
-        ),
+    return ToggleButtons(
+      isSelected: [_isTent == true, _isTent == false],
+      onPressed: (index) => setState(() => _isTent = index == 0 ? true : false),
+      constraints: const BoxConstraints(minHeight: 30, minWidth: 72),
+      children: const [
+        Text('Tent', style: TextStyle(fontSize: 13)),
+        Text('Shelter', style: TextStyle(fontSize: 13)),
       ],
     );
   }
 
   Widget _buildShowerSwitch() {
-    return Row(
-      children: [
-        const Text('Shower:', style: TextStyle(fontSize: 14)),
-        const SizedBox(width: 12),
-        Switch(
+    return SizedBox(
+      height: 30,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Switch(
           value: _hadShower,
           onChanged: (value) => setState(() => _hadShower = value),
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildCustomFieldInput(CustomField field) {
     switch (field.type) {
       case CustomFieldType.text:
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: TextFormField(
-            controller: _customFieldControllers[field.id!],
-            decoration: _slimDecoration(field.name),
-          ),
-        );
+        return _fieldRow(field.name, TextFormField(
+          controller: _customFieldControllers[field.id!],
+          style: _fieldTextStyle,
+          cursorHeight: 14,
+          decoration: _slimDecoration(),
+        ));
 
       case CustomFieldType.number:
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            children: [
-              Text('${field.name}:', style: const TextStyle(fontSize: 14)),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 80,
-                child: TextFormField(
-                  controller: _customFieldControllers[field.id!],
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    isDense: true,
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
+        return _fieldRow(field.name, SizedBox(
+          width: 100,
+          child: TextFormField(
+            controller: _customFieldControllers[field.id!],
+            style: _fieldTextStyle,
+            cursorHeight: 14,
+            decoration: _slimDecoration(),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textAlign: TextAlign.center,
           ),
-        );
+        ));
 
       case CustomFieldType.checkbox:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.only(bottom: 10),
           child: Row(
             children: [
-              Text('${field.name}:', style: const TextStyle(fontSize: 14)),
+              Text(field.name, style: _labelStyle),
               const SizedBox(width: 12),
               SizedBox(
                 width: 20,
@@ -860,22 +857,25 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
 
       case CustomFieldType.rating:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${field.name}:', style: const TextStyle(fontSize: 14)),
-              const SizedBox(width: 12),
-              ...List.generate(5, (index) {
-                final rating = _customFieldRatings[field.id!] ?? 0;
-                return GestureDetector(
-                  onTap: () => setState(() => _customFieldRatings[field.id!] = index + 1),
-                  child: Icon(
-                    index < rating ? Icons.star : Icons.star_border,
-                    color: Colors.amber,
-                    size: 24,
-                  ),
-                );
-              }),
+              Text(field.name, style: _labelStyle),
+              const SizedBox(height: 4),
+              Row(
+                children: List.generate(5, (index) {
+                  final rating = _customFieldRatings[field.id!] ?? 0;
+                  return GestureDetector(
+                    onTap: () => setState(() => _customFieldRatings[field.id!] = index + 1),
+                    child: Icon(
+                      index < rating ? Icons.star : Icons.star_border,
+                      color: const Color.fromRGBO(255, 193, 7, 1),
+                      size: 22,
+                    ),
+                  );
+                }),
+              ),
             ],
           ),
         );

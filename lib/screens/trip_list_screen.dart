@@ -215,16 +215,16 @@ class _TripListScreenState extends State<TripListScreen> {
 
   Color _getStatusColor(TripStatus status) {
     switch (status) {
-      case TripStatus.paused:    return Colors.blue;
-      case TripStatus.active:    return Colors.green;
-      case TripStatus.completed: return Colors.grey;
+      //case TripStatus.paused:    return Colors.blue;
+      case TripStatus.inProgress:    return Colors.blue;
+      case TripStatus.completed: return Colors.green;
     }
   }
 
   String _getStatusText(TripStatus status) {
     switch (status) {
-      case TripStatus.paused:    return 'Paused';
-      case TripStatus.active:    return 'Active';
+      //case TripStatus.paused:    return 'Paused';
+      case TripStatus.inProgress:    return 'In Progress';
       case TripStatus.completed: return 'Completed';
     }
   }

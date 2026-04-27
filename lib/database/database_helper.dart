@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 13,
+      version: 14,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       onOpen: (db) async {
@@ -134,7 +134,6 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 12) {
-      // Fresh start with foreign keys properly enforced
       await db.execute('DROP TABLE IF EXISTS custom_field_values');
       await db.execute('DROP TABLE IF EXISTS trip_custom_fields');
       await db.execute('DROP TABLE IF EXISTS custom_fields');
@@ -147,10 +146,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 13) {
-      // Add completed column to sections
       await db.execute('ALTER TABLE sections ADD COLUMN completed INTEGER NOT NULL DEFAULT 0');
 
-      // Add alternates table
       await db.execute('''
         CREATE TABLE alternates (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,8 +162,16 @@ class DatabaseHelper {
       ''');
       await db.execute('CREATE INDEX idx_alternates_trip_id ON alternates (trip_id)');
 
-      // Add alternate_id to entries
       await db.execute('ALTER TABLE entries ADD COLUMN alternate_id INTEGER REFERENCES alternates (id) ON DELETE SET NULL');
+    }
+
+    if (oldVersion < 14) {
+      // Add status column only if it doesn't already exist
+      final columns = await db.rawQuery('PRAGMA table_info(trips)');
+      final hasStatus = columns.any((col) => col['name'] == 'status');
+      if (!hasStatus) {
+        await db.execute('ALTER TABLE trips ADD COLUMN status INTEGER NOT NULL DEFAULT 0');
+      }
     }
   }
 
@@ -179,7 +184,7 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         start_date TEXT NOT NULL,
         start_mile REAL NOT NULL DEFAULT 0.0,
-        status INTEGER NOT NULL DEFAULT 1,
+        status INTEGER NOT NULL DEFAULT 0,
         end_date TEXT,
         trip_length REAL NOT NULL DEFAULT 0.0,
         end_mile REAL NOT NULL DEFAULT 0.0,

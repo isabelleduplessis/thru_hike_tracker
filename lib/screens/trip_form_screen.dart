@@ -31,24 +31,42 @@ class _TripFormScreenState extends State<TripFormScreen> {
   final _neroThresholdController = TextEditingController();
 
   DateTime _startDate = DateTime.now();
-  TripStatus _status = TripStatus.active;
+  TripStatus _status = TripStatus.inProgress;
   Direction? _direction;
   List<Section> _sections = [];
   List<Alternate> _alternates = [];
   bool _isSaving = false;
 
-  bool _trackCoordinates = false;
-  bool _trackShower = false;
-  bool _trackElevation = false;
-  bool _trackSleeping = false;
-
   List<CustomField> _availableFields = [];
   List<CustomField> _selectedFields = [];
 
-  // ── Shared styles ─────────────────────────────────────────────
-  static const _sectionTitleStyle = TextStyle(fontSize: 15, fontWeight: FontWeight.bold);
-  static const _sectionSubtitleStyle = TextStyle(fontSize: 11, color: Colors.grey);
-  static const _infoIconSize = 18.0;
+  static const _labelStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
+  static const _fieldTextStyle = TextStyle(fontSize: 13);
+  static const _subtitleStyle = TextStyle(fontSize: 11, color: Colors.grey);
+
+  InputDecoration _slimDecoration({String? suffixText, String? hintText}) {
+    return InputDecoration(
+      suffixText: suffixText,
+      hintText: hintText,
+      border: const OutlineInputBorder(),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      isDense: true,
+    );
+  }
+
+  Widget _fieldRow(String label, Widget field) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: _labelStyle),
+          const SizedBox(height: 4),
+          field,
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -81,10 +99,6 @@ class _TripFormScreenState extends State<TripFormScreen> {
         length: _settings.convertToDisplayUnit(a.length),
         completed: a.completed,
       )).toList();
-      _trackCoordinates = trip.trackCoordinates;
-      _trackShower = trip.trackShower;
-      _trackElevation = trip.trackElevation;
-      _trackSleeping = trip.trackSleeping;
       _neroThresholdController.text = trip.neroThreshold != null
           ? _settings.convertToDisplayUnit(trip.neroThreshold!).toStringAsFixed(1)
           : '';
@@ -112,17 +126,13 @@ class _TripFormScreenState extends State<TripFormScreen> {
     }
   }
 
-  double get _displayStartMile => double.tryParse(_startMileController.text) ?? 0.0;
-  double get _displayEndMile => double.tryParse(_endMileController.text) ?? 0.0;
-  double get _displayLength => (_displayEndMile - _displayStartMile).abs();
-
   Future<void> _saveTrip() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
     try {
-      final startMile = _settings.convertFromDisplayUnit(_displayStartMile);
-      final endMile = _settings.convertFromDisplayUnit(_displayEndMile);
+      final startMile = _settings.convertFromDisplayUnit(double.tryParse(_startMileController.text) ?? 0.0);
+      final endMile = _settings.convertFromDisplayUnit(double.tryParse(_endMileController.text) ?? 0.0);
       final tripLength = (endMile - startMile).abs();
 
       final baseSections = _sections.map((s) => Section(
@@ -155,10 +165,10 @@ class _TripFormScreenState extends State<TripFormScreen> {
         direction: _direction,
         sections: baseSections,
         alternates: baseAlternates,
-        trackCoordinates: _trackCoordinates,
-        trackShower: _trackShower,
-        trackElevation: _trackElevation,
-        trackSleeping: _trackSleeping,
+        trackCoordinates: true,
+        trackElevation: true,
+        trackShower: false,
+        trackSleeping: false,
         neroThreshold: _neroThresholdController.text.isNotEmpty
             ? _settings.convertFromDisplayUnit(double.parse(_neroThresholdController.text))
             : null,
@@ -219,14 +229,12 @@ class _TripFormScreenState extends State<TripFormScreen> {
     }
   }
 
-  // ── Info dialogs ──────────────────────────────────────────────
-
   void _showInfoDialog(String title, String content) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: SingleChildScrollView(child: Text(content, style: const TextStyle(fontSize: 14))),
+        content: SingleChildScrollView(child: Text(content, style: const TextStyle(fontSize: 13))),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Got it')),
         ],
@@ -235,12 +243,9 @@ class _TripFormScreenState extends State<TripFormScreen> {
   }
 
   Widget _infoIcon(String title, String content) {
-    return IconButton(
-      icon: const Icon(Icons.info_outline, size: _infoIconSize),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      tooltip: title,
-      onPressed: () => _showInfoDialog(title, content),
+    return GestureDetector(
+      onTap: () => _showInfoDialog(title, content),
+      child: Icon(Icons.info_outline, size: 15, color: Colors.grey[500]),
     );
   }
 
@@ -248,179 +253,295 @@ class _TripFormScreenState extends State<TripFormScreen> {
   Widget build(BuildContext context) {
     final isEditing = widget.trip != null;
     final unit = _settings.getDistanceUnitLabel();
+    final theme = Theme.of(context);
+    final dropdownTheme = theme.copyWith(
+      textTheme: theme.textTheme.apply(bodyColor: theme.colorScheme.onSurface),
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(isEditing ? 'Edit Hike' : 'New Hike'),
-        actions: isEditing
-            ? [IconButton(icon: const Icon(Icons.delete), onPressed: _deleteTrip, tooltip: 'Delete Hike')]
-            : null,
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
-            TextFormField(
+
+            // ── Start Date / Status ───────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Start Date', style: _labelStyle),
+                        const SizedBox(height: 4),
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _startDate,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime.now().add(const Duration(days: 730)),
+                            );
+                            if (picked != null) setState(() => _startDate = picked);
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade400),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today, size: 14),
+                                const SizedBox(width: 8),
+                                Text(DateFormat.yMMMd().format(_startDate), style: _fieldTextStyle),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Status', style: _labelStyle),
+                        const SizedBox(height: 4),
+                        Theme(
+                          data: dropdownTheme,
+                          child: DropdownButtonFormField<TripStatus>(
+                            decoration: _slimDecoration(),
+                            style: _fieldTextStyle.copyWith(color: theme.colorScheme.onSurface),
+                            value: _status,
+                            items: const [
+                              DropdownMenuItem(value: TripStatus.inProgress, child: Text('In Progress')),
+                              //DropdownMenuItem(value: TripStatus.paused, child: Text('Paused')),
+                              DropdownMenuItem(value: TripStatus.completed, child: Text('Completed')),
+                            ],
+                            onChanged: (v) { if (v != null) setState(() => _status = v); },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Hike Name ─────────────────────────────────────────────
+            _fieldRow('Hike Name', TextFormField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Hike Name', border: OutlineInputBorder()),
+              style: _fieldTextStyle,
+              cursorHeight: 14,
+              decoration: _slimDecoration(),
               validator: (v) => v!.isEmpty ? 'Enter a name' : null,
-            ),
-            const SizedBox(height: 16),
+            )),
 
-            DropdownButtonFormField<Direction>(
-              value: _direction,
-              decoration: const InputDecoration(labelText: 'Direction', border: OutlineInputBorder()),
-              items: Direction.values
-                  .map((d) => DropdownMenuItem(value: d, child: Text(d.name)))
-                  .toList(),
-              onChanged: (v) => setState(() => _direction = v),
-            ),
-            const SizedBox(height: 16),
-
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Start Date', style: TextStyle(fontSize: 14)),
-              subtitle: Text(DateFormat('MMM dd, yyyy').format(_startDate), style: const TextStyle(fontSize: 13)),
-              trailing: const Icon(Icons.calendar_today, size: 18),
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _startDate,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime.now().add(const Duration(days: 730)),
-                );
-                if (picked != null) setState(() => _startDate = picked);
-              },
-            ),
-            const SizedBox(height: 8),
-
-            DropdownButtonFormField<TripStatus>(
-              value: _status,
-              decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder()),
-              items: const [
-                DropdownMenuItem(value: TripStatus.active, child: Text('Active')),
-                DropdownMenuItem(value: TripStatus.paused, child: Text('Paused')),
-                DropdownMenuItem(value: TripStatus.completed, child: Text('Completed')),
-              ],
-              onChanged: (v) { if (v != null) setState(() => _status = v); },
-            ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _startMileController,
-                    decoration: InputDecoration(labelText: 'Start $unit', border: const OutlineInputBorder()),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    controller: _endMileController,
-                    decoration: InputDecoration(labelText: 'End $unit', border: const OutlineInputBorder()),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(8),
+            // ── Direction ─────────────────────────────────────────────
+            _fieldRow('Direction', Theme(
+              data: dropdownTheme,
+              child: DropdownButtonFormField<Direction>(
+                decoration: _slimDecoration(),
+                style: _fieldTextStyle.copyWith(color: theme.colorScheme.onSurface),
+                value: _direction,
+                items: Direction.values
+                    .map((d) => DropdownMenuItem(value: d, child: Text(d.name)))
+                    .toList(),
+                onChanged: (v) => setState(() => _direction = v),
               ),
-              child: Center(
-                child: Text(
-                  'Total Distance: ${_displayLength.toStringAsFixed(1)} $unit',
-                  style: const TextStyle(fontSize: 14),
-                ),
+            )),
+
+            // ── Start / End ───────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Start', style: _labelStyle),
+                        const SizedBox(height: 4),
+                        TextFormField(
+                          controller: _startMileController,
+                          style: _fieldTextStyle,
+                          cursorHeight: 14,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: _slimDecoration(suffixText: unit),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('End', style: _labelStyle),
+                        const SizedBox(height: 4),
+                        TextFormField(
+                          controller: _endMileController,
+                          style: _fieldTextStyle,
+                          cursorHeight: 14,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: _slimDecoration(suffixText: unit),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
 
-            const SizedBox(height: 20),
-            const Divider(),
-            _buildSectionEditor(),
+            // ── Nero Threshold ────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Nero Threshold', style: _labelStyle),
+                      const SizedBox(width: 4),
+                      _infoIcon(
+                        'Nero Days',
+                        'A nero (nearly zero) day is a day where you hiked a very short distance — not quite a zero but close. '
+                        'Set a threshold distance here and any day where your total mileage is greater than zero but at or '
+                        'below that threshold will count as a nero day in your stats.',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  TextFormField(
+                    controller: _neroThresholdController,
+                    style: _fieldTextStyle,
+                    cursorHeight: 14,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: _slimDecoration(suffixText: unit, hintText: 'e.g. 10'),
+                  ),
+                ],
+              ),
+            ),
 
-            const SizedBox(height: 20),
-            const Divider(),
-            _buildAlternateEditor(),
+                        // ── Sections ──────────────────────────────────────────────
+            _buildSectionEditor(unit),
 
-            const SizedBox(height: 20),
-            const Divider(),
-            _buildNeroDays(),
+            const SizedBox(height: 10),
 
-            const SizedBox(height: 20),
-            const Divider(),
-            _buildOptionalTracking(),
+            // ── Alternates ────────────────────────────────────────────
+            _buildAlternateEditor(unit),
 
-            const SizedBox(height: 20),
-            const Divider(),
+            const SizedBox(height: 10),
+
+            // ── Custom Fields ─────────────────────────────────────────
             _buildCustomFieldsSection(),
-            const SizedBox(height: 32),
 
-            FilledButton(
-              onPressed: _isSaving ? null : _saveTrip,
-              child: _isSaving
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : Text(isEditing ? 'Update Hike' : 'Save Hike'),
-            ),
+            const SizedBox(height: 16),
+
+            // ── Save / Delete ─────────────────────────────────────────
+            if (isEditing)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving ? null : _deleteTrip,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      child: const Text('Delete Hike', style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _isSaving ? null : _saveTrip,
+                      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
+                      child: _isSaving
+                          ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Save Hike', style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                ],
+              )
+            else
+              FilledButton(
+                onPressed: _isSaving ? null : _saveTrip,
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
+                child: _isSaving
+                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Create Hike', style: TextStyle(fontSize: 13)),
+              ),
+
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title, String infoTitle, String infoContent, {Widget? trailing}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Text(title, style: _sectionTitleStyle),
-            const SizedBox(width: 4),
-            _infoIcon(infoTitle, infoContent),
-          ],
-        ),
-        if (trailing != null) trailing,
-      ],
-    );
-  }
-
-  Widget _buildSectionEditor() {
-    final unit = _settings.getDistanceUnitLabel();
+  Widget _buildSectionEditor(String unit) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader(
-          'Trail Sections',
-          'Trail Sections',
-          'Sections let you divide your trail into named segments (e.g. "Southern Terminus to Silverton"). '
-          'Each section has a start and end mile. The app automatically determines which section an entry '
-          'belongs to based on the end mile. You can manually mark a section as completed if you\'ve '
-          'finished it regardless of logged coverage.',
-          trailing: TextButton.icon(
-            onPressed: () {
-              setState(() {
-                double start = _sections.isEmpty ? _displayStartMile : _sections.last.endMile;
-                _sections.add(Section(name: '', startMile: start, endMile: start + 50));
-              });
-            },
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add', style: TextStyle(fontSize: 13)),
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Text('Sections', style: _labelStyle),
+                const SizedBox(width: 4),
+                _infoIcon(
+                  'Trail Sections',
+                  'Sections let you divide your trail into named segments (e.g. "Southern Terminus to Silverton"). '
+                  'Each section has a start and end mile. The app automatically determines which section an entry '
+                  'belongs to based on the end mile.',
+                ),
+              ],
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  double start = _sections.isEmpty
+                      ? (double.tryParse(_startMileController.text) ?? 0.0)
+                      : _sections.last.endMile;
+                  _sections.add(Section(name: '', startMile: start, endMile: start + 50));
+                });
+              },
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Icon(Icons.add, size: 18),
+            ),
+          ],
         ),
+        const SizedBox(height: 4),
         ..._sections.asMap().entries.map((entry) {
-          int index = entry.key;
-          Section section = entry.value;
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
+          final index = entry.key;
+          final section = entry.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -429,48 +550,76 @@ class _TripFormScreenState extends State<TripFormScreen> {
                       Expanded(
                         child: TextFormField(
                           initialValue: section.name,
-                          decoration: const InputDecoration(labelText: 'Section Name'),
+                          style: _fieldTextStyle,
+                          cursorHeight: 14,
+                          decoration: _slimDecoration(hintText: 'Section name'),
                           onChanged: (val) => setState(() =>
                               _sections[index] = section.copyWith(name: val)),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => setState(() => _sections.removeAt(index)),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => setState(() => _sections.removeAt(index)),
+                        child: Icon(Icons.close, size: 16, color: Colors.grey[500]),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
-                        child: TextFormField(
-                          initialValue: section.startMile.toStringAsFixed(1),
-                          decoration: InputDecoration(labelText: 'Start $unit'),
-                          keyboardType: TextInputType.number,
-                          onChanged: (val) => setState(() => _sections[index] =
-                              section.copyWith(startMile: double.tryParse(val) ?? 0.0)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Start', style: _labelStyle),
+                            const SizedBox(height: 4),
+                            TextFormField(
+                              initialValue: section.startMile.toStringAsFixed(1),
+                              style: _fieldTextStyle,
+                              cursorHeight: 14,
+                              keyboardType: TextInputType.number,
+                              decoration: _slimDecoration(suffixText: unit),
+                              onChanged: (val) => setState(() => _sections[index] =
+                                  section.copyWith(startMile: double.tryParse(val) ?? 0.0)),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: TextFormField(
-                          initialValue: section.endMile.toStringAsFixed(1),
-                          decoration: InputDecoration(labelText: 'End $unit'),
-                          keyboardType: TextInputType.number,
-                          onChanged: (val) => setState(() => _sections[index] =
-                              section.copyWith(endMile: double.tryParse(val) ?? 0.0)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('End', style: _labelStyle),
+                            const SizedBox(height: 4),
+                            TextFormField(
+                              initialValue: section.endMile.toStringAsFixed(1),
+                              style: _fieldTextStyle,
+                              cursorHeight: 14,
+                              keyboardType: TextInputType.number,
+                              decoration: _slimDecoration(suffixText: unit),
+                              onChanged: (val) => setState(() => _sections[index] =
+                                  section.copyWith(endMile: double.tryParse(val) ?? 0.0)),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      Checkbox(
-                        value: section.completed,
-                        onChanged: (val) => setState(() =>
-                            _sections[index] = section.copyWith(completed: val ?? false)),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: Checkbox(
+                          value: section.completed,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          onChanged: (val) => setState(() =>
+                              _sections[index] = section.copyWith(completed: val ?? false)),
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       const Text('Completed', style: TextStyle(fontSize: 13)),
                     ],
                   ),
@@ -478,48 +627,59 @@ class _TripFormScreenState extends State<TripFormScreen> {
               ),
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }
 
-  Widget _buildAlternateEditor() {
-    final unit = _settings.getDistanceUnitLabel();
+  Widget _buildAlternateEditor(String unit) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader(
-          'Alternate Routes',
-          'Alternate Routes',
-          'An alternate route is an off-trail route that diverges from the main trail.\n\n'
-          'Departure: the trail mile where the alternate begins.\n\n'
-          'Return: the trail mile where the alternate rejoins the main trail.\n\n'
-          'Length: the total distance of the alternate route itself — independent of the main trail mile system.\n\n'
-          'When logging entries on an alternate, select it from the entry form. Your start and end miles will '
-          'be in alternate miles (starting from 0).\n\n'
-          'Mark the alternate as completed when you finish it. Completed alternates count toward your total '
-          'distance and the trail miles between departure and return are treated as covered in progress tracking.',
-          trailing: TextButton.icon(
-            onPressed: () {
-              setState(() {
-                _alternates.add(Alternate(name: '', departureMile: 0.0, returnMile: 0.0, length: 0.0));
-              });
-            },
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add', style: TextStyle(fontSize: 13)),
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Text('Alternates', style: _labelStyle),
+                const SizedBox(width: 4),
+                _infoIcon(
+                  'Alternate Routes',
+                  'An alternate route diverges from the main trail.\n\n'
+                  'Departure: the trail mile where the alternate begins.\n\n'
+                  'Return: the trail mile where the alternate rejoins the main trail.\n\n'
+                  'When logging entries on an alternate, select it from the entry form. '
+                  'Mark the alternate as completed when you finish it.',
+                ),
+              ],
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _alternates.add(Alternate(name: '', departureMile: 0.0, returnMile: 0.0, length: 0.0));
+                });
+              },
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Icon(Icons.add, size: 18),
+            ),
+          ],
         ),
-        if (_alternates.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: Text('No alternate routes defined.', style: _sectionSubtitleStyle),
-          ),
+        const SizedBox(height: 4),
         ..._alternates.asMap().entries.map((entry) {
-          int index = entry.key;
-          Alternate alt = entry.value;
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
+          final index = entry.key;
+          final alt = entry.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -528,14 +688,17 @@ class _TripFormScreenState extends State<TripFormScreen> {
                       Expanded(
                         child: TextFormField(
                           initialValue: alt.name,
-                          decoration: const InputDecoration(labelText: 'Alternate Name'),
+                          style: _fieldTextStyle,
+                          cursorHeight: 14,
+                          decoration: _slimDecoration(hintText: 'Alternate name'),
                           onChanged: (val) => setState(() =>
                               _alternates[index] = alt.copyWith(name: val)),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => setState(() => _alternates.removeAt(index)),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => setState(() => _alternates.removeAt(index)),
+                        child: Icon(Icons.close, size: 16, color: Colors.grey[500]),
                       ),
                     ],
                   ),
@@ -543,45 +706,58 @@ class _TripFormScreenState extends State<TripFormScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextFormField(
-                          initialValue: alt.departureMile.toStringAsFixed(1),
-                          decoration: InputDecoration(labelText: 'Departure $unit'),
-                          keyboardType: TextInputType.number,
-                          onChanged: (val) => setState(() => _alternates[index] =
-                              alt.copyWith(departureMile: double.tryParse(val) ?? 0.0)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Departure', style: _labelStyle),
+                            const SizedBox(height: 4),
+                            TextFormField(
+                              initialValue: alt.departureMile.toStringAsFixed(1),
+                              style: _fieldTextStyle,
+                              cursorHeight: 14,
+                              keyboardType: TextInputType.number,
+                              decoration: _slimDecoration(suffixText: unit),
+                              onChanged: (val) => setState(() => _alternates[index] =
+                                  alt.copyWith(departureMile: double.tryParse(val) ?? 0.0)),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: TextFormField(
-                          initialValue: alt.returnMile.toStringAsFixed(1),
-                          decoration: InputDecoration(labelText: 'Return $unit'),
-                          keyboardType: TextInputType.number,
-                          onChanged: (val) => setState(() => _alternates[index] =
-                              alt.copyWith(returnMile: double.tryParse(val) ?? 0.0)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Return', style: _labelStyle),
+                            const SizedBox(height: 4),
+                            TextFormField(
+                              initialValue: alt.returnMile.toStringAsFixed(1),
+                              style: _fieldTextStyle,
+                              cursorHeight: 14,
+                              keyboardType: TextInputType.number,
+                              decoration: _slimDecoration(suffixText: unit),
+                              onChanged: (val) => setState(() => _alternates[index] =
+                                  alt.copyWith(returnMile: double.tryParse(val) ?? 0.0)),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  TextFormField(
-                    initialValue: alt.length.toStringAsFixed(1),
-                    decoration: InputDecoration(
-                      labelText: 'Alternate Length',
-                      suffixText: unit,
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (val) => setState(() => _alternates[index] =
-                        alt.copyWith(length: double.tryParse(val) ?? 0.0)),
-                  ),
                   Row(
                     children: [
-                      Checkbox(
-                        value: alt.completed,
-                        onChanged: (val) => setState(() =>
-                            _alternates[index] = alt.copyWith(completed: val ?? false)),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: Checkbox(
+                          value: alt.completed,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          onChanged: (val) => setState(() =>
+                              _alternates[index] = alt.copyWith(completed: val ?? false)),
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       const Text('Completed', style: TextStyle(fontSize: 13)),
                     ],
                   ),
@@ -589,89 +765,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
               ),
             ),
           );
-        }).toList(),
-      ],
-    );
-  }
-
-  Widget _buildNeroDays() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text('Nero Days', style: _sectionTitleStyle),
-            const SizedBox(width: 4),
-            _infoIcon(
-              'Nero Days',
-              'A nero (nearly zero) day is a day where you hiked a very short distance — not quite a zero but close. '
-              'Set a threshold distance here and any day where your total mileage is greater than zero but at or '
-              'below that threshold will count as a nero day in your stats.',
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: _neroThresholdController,
-          decoration: InputDecoration(
-            labelText: 'Nero Threshold',
-            hintText: 'e.g. 10',
-            border: const OutlineInputBorder(),
-            suffixText: _settings.getDistanceUnitLabel(),
-          ),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOptionalTracking() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text('Optional Tracking', style: _sectionTitleStyle),
-            const SizedBox(width: 4),
-            _infoIcon(
-              'Optional Tracking',
-              'These fields are hidden by default to keep your daily entries clean. Enable only what you want '
-              'to track for this hike. You can change these settings at any time and existing entries won\'t be affected.',
-            ),
-          ],
-        ),
-        CheckboxListTile(
-          dense: true,
-          title: const Text('Coordinates', style: TextStyle(fontSize: 14)),
-          subtitle: const Text('Log GPS location per entry', style: _sectionSubtitleStyle),
-          value: _trackCoordinates,
-          onChanged: (v) => setState(() => _trackCoordinates = v ?? false),
-          controlAffinity: ListTileControlAffinity.leading,
-        ),
-        CheckboxListTile(
-          dense: true,
-          title: const Text('Shower', style: TextStyle(fontSize: 14)),
-          subtitle: const Text('Track whether you showered', style: _sectionSubtitleStyle),
-          value: _trackShower,
-          onChanged: (v) => setState(() => _trackShower = v ?? false),
-          controlAffinity: ListTileControlAffinity.leading,
-        ),
-        CheckboxListTile(
-          dense: true,
-          title: const Text('Elevation', style: TextStyle(fontSize: 14)),
-          subtitle: const Text('Log elevation gain and loss', style: _sectionSubtitleStyle),
-          value: _trackElevation,
-          onChanged: (v) => setState(() => _trackElevation = v ?? false),
-          controlAffinity: ListTileControlAffinity.leading,
-        ),
-        CheckboxListTile(
-          dense: true,
-          title: const Text('Sleeping Arrangement', style: TextStyle(fontSize: 14)),
-          subtitle: const Text('Track tent vs shelter', style: _sectionSubtitleStyle),
-          value: _trackSleeping,
-          onChanged: (v) => setState(() => _trackSleeping = v ?? false),
-          controlAffinity: ListTileControlAffinity.leading,
-        ),
+        }),
       ],
     );
   }
@@ -685,54 +779,58 @@ class _TripFormScreenState extends State<TripFormScreen> {
           children: [
             Row(
               children: [
-                const Text('Custom Fields', style: _sectionTitleStyle),
+                Text('Custom Fields', style: _labelStyle),
                 const SizedBox(width: 4),
                 _infoIcon(
                   'Custom Fields',
                   'Custom fields let you track anything specific to your hike — bear canisters used, weather '
                   'conditions, towns visited, mood ratings, etc. Fields are shared across all hikes but you '
-                  'choose which ones appear in each hike\'s entries. Drag to reorder them.',
+                  'choose which ones appear in each hike\'s entries.',
                 ),
               ],
             ),
-            TextButton.icon(
+            TextButton(
               onPressed: _showAddFieldDialog,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add Field', style: TextStyle(fontSize: 13)),
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Icon(Icons.add, size: 18),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         if (_selectedFields.isEmpty)
-          const Text(
-            'No custom fields yet. Add fields to track specific data for this hike.',
-            style: _sectionSubtitleStyle,
-          )
+          const Text('No custom fields added.', style: TextStyle(fontSize: 12, color: Colors.grey))
         else
-          ReorderableListView(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            onReorder: (oldIndex, newIndex) {
-              setState(() {
-                if (newIndex > oldIndex) newIndex -= 1;
-                final field = _selectedFields.removeAt(oldIndex);
-                _selectedFields.insert(newIndex, field);
-              });
-            },
-            children: _selectedFields.map((field) {
-              return ListTile(
-                key: ValueKey(field.id),
-                dense: true,
-                leading: const Icon(Icons.drag_handle, size: 18),
-                title: Text(field.name, style: const TextStyle(fontSize: 14)),
-                subtitle: Text(_getFieldTypeLabel(field.type), style: _sectionSubtitleStyle),
-                trailing: IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: () => setState(() => _selectedFields.remove(field)),
-                ),
-              );
-            }).toList(),
-          ),
+          ..._selectedFields.map((field) => Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Text(field.name, style: _fieldTextStyle),
+                        const SizedBox(width: 8),
+                        Text(_getFieldTypeLabel(field.type), style: const TextStyle(fontSize: 12, color: Colors.grey)), // how to make drop
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() => _selectedFields.remove(field)),
+                    child: Icon(Icons.close, size: 15, color: Colors.grey[500]),
+                  ),
+                ],
+              ),
+            ),
+          )),
       ],
     );
   }
@@ -742,7 +840,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
       case CustomFieldType.text: return 'Text';
       case CustomFieldType.number: return 'Number';
       case CustomFieldType.checkbox: return 'Checkbox';
-      case CustomFieldType.rating: return 'Rating (1-5)';
+      case CustomFieldType.rating: return 'Rating';
     }
   }
 
@@ -853,7 +951,7 @@ class _AddCustomFieldDialogState extends State<_AddCustomFieldDialog> {
             else
               ...unselectedFields.map((field) => ListTile(
                 dense: true,
-                title: Text(field.name, style: const TextStyle(fontSize: 14)),
+                title: Text(field.name, style: const TextStyle(fontSize: 13)),
                 subtitle: Text(_getTypeLabel(field.type),
                     style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 onTap: () {
@@ -865,7 +963,7 @@ class _AddCustomFieldDialogState extends State<_AddCustomFieldDialog> {
             ListTile(
               dense: true,
               leading: const Icon(Icons.add_circle, size: 18),
-              title: const Text('Create New Field', style: TextStyle(fontSize: 14)),
+              title: const Text('Create New Field', style: TextStyle(fontSize: 13)),
               onTap: () => setState(() => _showCreateNew = true),
             ),
           ],

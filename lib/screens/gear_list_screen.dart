@@ -112,40 +112,8 @@ class _GearListScreenState extends State<GearListScreen> {
       future: _gearRepository.getGearStats(gear.id!),
       builder: (context, snapshot) {
         return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: const Icon(Icons.backpack, size: 40),
-            title: Text(
-              gear.name,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (gear.category != null)
-                  Text(gear.category!)
-                else
-                  const Text(
-                    'No category',
-                    style: TextStyle(fontStyle: FontStyle.italic),
-                  ),
-                if (snapshot.hasData) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '${_settings.formatDistance(snapshot.data!.totalMiles)} • ${snapshot.data!.daysUsed} days',
-                    style: const TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            trailing: const Icon(Icons.chevron_right),
+          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+          child: InkWell(
             onTap: () async {
               final result = await Navigator.push(
                 context,
@@ -153,11 +121,47 @@ class _GearListScreenState extends State<GearListScreen> {
                   builder: (context) => GearFormScreen(gear: gear),
                 ),
               );
-              
               if (result == true || result == 'deleted') {
                 _loadGear();
               }
             },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          gear.name,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 3),
+                        if (gear.category != null)
+                          Text(
+                            gear.category!,
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          )
+                        else
+                          Text(
+                            'No category',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
+                          ),
+                        if (snapshot.hasData) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            '${_settings.formatDistance(snapshot.data!.totalMiles)} • ${snapshot.data!.daysUsed} days',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Icon(PhosphorIcons.caretRight(), size: 16, color: Colors.grey[400]),
+                ],
+              ),
+            ),
           ),
         );
       },
