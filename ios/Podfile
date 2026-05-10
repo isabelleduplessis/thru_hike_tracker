@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '14.0'
+platform :ios, '14.0' #, '12.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -39,12 +39,6 @@ end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-      
-      # Fix for 'Flutter/Flutter.h' not found
-      config.build_settings['SWIFT_INCLUDE_PATHS'] = '$(inherited) ${PODS_CONFIGURATION_BUILD_DIR}/Flutter'
-      config.build_settings['OTHER_SWIFT_FLAGS'] = '$(inherited) -Xcc -fmodule-map-file=${PODS_CONFIGURATION_BUILD_DIR}/Flutter/Flutter.modulemap'
-    end
+    flutter_additional_ios_build_settings(target)
   end
 end
