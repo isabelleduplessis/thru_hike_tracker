@@ -41,7 +41,7 @@ class ThruHikeTrackerApp extends StatelessWidget {
           onError: Colors.white,
           outline: Colors.grey,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 0.3, // what is the number range of these values? 
           color: Color.fromRGBO(255, 255, 255, 1), // your card color
           shape: RoundedRectangleBorder(
