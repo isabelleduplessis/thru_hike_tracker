@@ -2,7 +2,8 @@
 
 Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, view statistics based on daily mileage entries, keep a journal, and update friends and family along the way. Existing hike-tracking apps do not allow users to keep track of on-trail vs off-trail miles, alternate routes, or skips, but Thru-Hike Tracker will allow users to accurately document their hike even when things don't go as planned.
 
-![Logo](assets/icons/icon_solid.png)
+
+<img src="./assets/icon/icon_solid.png" width="250">
 
 ## Features
 - Log entries for multiple long-distance hiking trails all in one place
@@ -11,4 +12,7 @@ Thru-Hike Tracker is an app designed to allow thru-hikers to track their hikes, 
 - Keep a gear log to track distances on shoes, packs, or any gear items used on one or multiple trails
 - Option to add coordinates to daily entries to view all entries on a map
 
-![Summary_screenshot](assets/screenshots/IMG_0244.jpg)
+\
+Example Summary Statistics Page:
+
+<img src="./assets/screenshots/IMG_0244.jpg" width="300">
