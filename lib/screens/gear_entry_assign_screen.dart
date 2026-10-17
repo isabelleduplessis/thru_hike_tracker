@@ -12,6 +12,7 @@ import '../repositories/entry_repository.dart';
 import '../repositories/trip_repository.dart';
 import '../utils/day_number.dart';
 import '../utils/section_colors.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class GearEntryAssignScreen extends StatefulWidget {
   final Gear gear;
@@ -179,7 +180,7 @@ class _GearEntryAssignScreenState extends State<GearEntryAssignScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.inbox, size: 64, color: Colors.grey),
+                      Icon(PhosphorIcons.tray(), size: 64, color: Colors.grey),
                       const SizedBox(height: 16),
                       const Text('No entries found in this gear\'s active period.',
                           style: TextStyle(color: Colors.grey)),

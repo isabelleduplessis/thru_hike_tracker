@@ -569,7 +569,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 );
                 if (result == true) _loadEntries();
               },
-              icon: const Icon(Icons.add),
+              icon: Icon(PhosphorIcons.plus()),
               label: const Text('Add Entry'),
             ),
           ],

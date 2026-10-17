@@ -25,12 +25,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         children: [
           const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text('Units', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Text('Units', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
           ),
           RadioListTile<UnitSystem>(
-            title: const Text('Imperial'),
-            subtitle: const Text('Miles & Feet'),
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            title: const Text('Imperial', style: TextStyle(fontSize: 13)),
+            subtitle: const Text('Miles & Feet', style: TextStyle(fontSize: 12)),
             value: UnitSystem.imperial,
             groupValue: _selectedSystem,
             onChanged: (value) async {
@@ -46,8 +48,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           RadioListTile<UnitSystem>(
-            title: const Text('Metric'),
-            subtitle: const Text('Kilometers & Meters'),
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            title: const Text('Metric', style: TextStyle(fontSize: 13)),
+            subtitle: const Text('Kilometers & Meters', style: TextStyle(fontSize: 12)),
             value: UnitSystem.metric,
             groupValue: _selectedSystem,
             onChanged: (value) async {

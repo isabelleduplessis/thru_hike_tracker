@@ -13,6 +13,7 @@ import '../repositories/custom_field_repository.dart';
 import '../services/settings_service.dart';
 import '../models/direction.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class EntryFormScreen extends StatefulWidget {
   final Trip trip;
@@ -388,7 +389,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.calendar_today, size: 14),
+                    Icon(PhosphorIcons.calendarBlank(), size: 14),
                     const SizedBox(width: 8),
                     Text(DateFormat.yMMMd().format(_selectedDate), style: _fieldTextStyle),
                   ],
@@ -576,7 +577,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                           ),
                           child: _isFetchingLocation
                             ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.my_location, size: 13),
+                            : Icon(PhosphorIcons.crosshair(), size: 13),
                           ),
                         ),
                         if (_latitudeController.text.isNotEmpty) ...[
@@ -588,7 +589,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                                 _latitudeController.clear();
                                 _longitudeController.clear();
                               }),
-                              icon: const Icon(Icons.clear, size: 13),
+                              icon: Icon(PhosphorIcons.x(), size: 13),
                               label: const Text('Clear', style: TextStyle(fontSize: 11)),
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
@@ -869,7 +870,9 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
                   return GestureDetector(
                     onTap: () => setState(() => _customFieldRatings[field.id!] = index + 1),
                     child: Icon(
-                      index < rating ? Icons.star : Icons.star_border,
+                      index < rating
+                          ? PhosphorIcons.star(PhosphorIconsStyle.fill)
+                          : PhosphorIcons.star(PhosphorIconsStyle.regular),
                       color: const Color.fromRGBO(255, 193, 7, 1),
                       size: 22,
                     ),

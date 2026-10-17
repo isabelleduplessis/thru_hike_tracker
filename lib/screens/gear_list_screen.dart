@@ -66,7 +66,7 @@ class _GearListScreenState extends State<GearListScreen> {
             _loadGear();
           }
         },
-        child: const Icon(Icons.add),
+        child: Icon(PhosphorIcons.plus()),
       ),
     );
   }

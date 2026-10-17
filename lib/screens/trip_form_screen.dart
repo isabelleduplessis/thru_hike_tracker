@@ -9,6 +9,7 @@ import '../models/custom_field.dart';
 import '../repositories/trip_repository.dart';
 import '../repositories/custom_field_repository.dart';
 import '../services/settings_service.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class TripFormScreen extends StatefulWidget {
   final Trip? trip;
@@ -245,7 +246,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
   Widget _infoIcon(String title, String content) {
     return GestureDetector(
       onTap: () => _showInfoDialog(title, content),
-      child: Icon(Icons.info_outline, size: 15, color: Colors.grey[500]),
+      child: Icon(PhosphorIcons.info(), size: 15, color: Colors.grey[500]),
     );
   }
 
@@ -299,7 +300,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.calendar_today, size: 14),
+                                Icon(PhosphorIcons.calendarBlank(), size: 14),
                                 const SizedBox(width: 8),
                                 Text(DateFormat.yMMMd().format(_startDate), style: _fieldTextStyle),
                               ],
@@ -526,7 +527,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Icon(Icons.add, size: 18),
+              child: Icon(PhosphorIcons.plus(), size: 18),
             ),
           ],
         ),
@@ -560,7 +561,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
                       const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () => setState(() => _sections.removeAt(index)),
-                        child: Icon(Icons.close, size: 16, color: Colors.grey[500]),
+                        child: Icon(PhosphorIcons.x(), size: 16, color: Colors.grey[500]),
                       ),
                     ],
                   ),
@@ -664,7 +665,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Icon(Icons.add, size: 18),
+              child: Icon(PhosphorIcons.plus(), size: 18),
             ),
           ],
         ),
@@ -698,7 +699,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
                       const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () => setState(() => _alternates.removeAt(index)),
-                        child: Icon(Icons.close, size: 16, color: Colors.grey[500]),
+                        child: Icon(PhosphorIcons.x(), size: 16, color: Colors.grey[500]),
                       ),
                     ],
                   ),
@@ -796,7 +797,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Icon(Icons.add, size: 18),
+              child: Icon(PhosphorIcons.plus(), size: 18),
             ),
           ],
         ),
@@ -825,7 +826,7 @@ class _TripFormScreenState extends State<TripFormScreen> {
                   ),
                   GestureDetector(
                     onTap: () => setState(() => _selectedFields.remove(field)),
-                    child: Icon(Icons.close, size: 15, color: Colors.grey[500]),
+                    child: Icon(PhosphorIcons.x(), size: 15, color: Colors.grey[500]),
                   ),
                 ],
               ),
@@ -962,7 +963,7 @@ class _AddCustomFieldDialogState extends State<_AddCustomFieldDialog> {
             const Divider(),
             ListTile(
               dense: true,
-              leading: const Icon(Icons.add_circle, size: 18),
+              leading: Icon(PhosphorIcons.plusCircle(), size: 18),
               title: const Text('Create New Field', style: TextStyle(fontSize: 13)),
               onTap: () => setState(() => _showCreateNew = true),
             ),

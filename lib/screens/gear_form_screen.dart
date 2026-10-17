@@ -6,6 +6,7 @@ import '../models/gear.dart';
 import '../repositories/gear_repository.dart';
 import 'gear_entry_assign_screen.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class GearFormScreen extends StatefulWidget {
   final Gear? gear;
@@ -19,6 +20,8 @@ class GearFormScreen extends StatefulWidget {
 class _GearFormScreenState extends State<GearFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final GearRepository _gearRepository = GearRepository();
+  static const _labelStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
+  static const _fieldTextStyle = TextStyle(fontSize: 13);
   
   final _nameController = TextEditingController();
   final _categoryController = TextEditingController();
@@ -151,15 +154,6 @@ class _GearFormScreenState extends State<GearFormScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(isEditing ? 'Edit Gear' : 'Add Gear'),
-        actions: isEditing
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: _deleteGear,
-                  tooltip: 'Delete Gear',
-                ),
-              ]
-            : null,
       ),
       body: Form(
         key: _formKey,
@@ -168,9 +162,12 @@ class _GearFormScreenState extends State<GearFormScreen> {
           children: [
             TextFormField(
               controller: _nameController,
+              style: _fieldTextStyle,
               decoration: const InputDecoration(
                 labelText: 'Gear Name',
+                labelStyle: _labelStyle,
                 hintText: 'e.g., Altra Lone Peaks, Big Agnes Tent',
+                hintStyle: TextStyle(fontSize: 12),
                 border: OutlineInputBorder(),
               ),
               textCapitalization: TextCapitalization.words,
@@ -184,9 +181,12 @@ class _GearFormScreenState extends State<GearFormScreen> {
             
             TextFormField(
               controller: _categoryController,
+              style: _fieldTextStyle,
               decoration: const InputDecoration(
                 labelText: 'Category (Optional)',
+                labelStyle: _labelStyle,
                 hintText: 'e.g., Footwear, Shelter, Pack',
+                hintStyle: TextStyle(fontSize: 12),
                 border: OutlineInputBorder(),
               ),
               textCapitalization: TextCapitalization.words,
@@ -196,12 +196,12 @@ class _GearFormScreenState extends State<GearFormScreen> {
 
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Start Date'),
+              title: const Text('Start Date', style: _labelStyle),
               subtitle: Text(
                 DateFormat('MMM dd, yyyy').format(_startDate),
-                style: const TextStyle(fontSize: 16),
+                style: _fieldTextStyle,
               ),
-              trailing: const Icon(Icons.calendar_today),
+              trailing: Icon(PhosphorIcons.calendarBlank()),
               onTap: () async {
                 final picked = await showDatePicker(
                   context: context,
@@ -217,10 +217,10 @@ class _GearFormScreenState extends State<GearFormScreen> {
 
             Row(
               children: [
-                const Text('Status:', style: TextStyle(fontSize: 16)),
+                const Text('Status:', style: _labelStyle),
                 const SizedBox(width: 16),
                 ChoiceChip(
-                  label: const Text('Active'),
+                  label: const Text('Active', style: TextStyle(fontSize: 13)),
                   selected: !_isRetired,
                   onSelected: (selected) {
                     setState(() {
@@ -231,7 +231,7 @@ class _GearFormScreenState extends State<GearFormScreen> {
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('Retired'),
+                  label: const Text('Retired', style: TextStyle(fontSize: 13)),
                   selected: _isRetired,
                   onSelected: (selected) {
                     setState(() {
@@ -247,7 +247,7 @@ class _GearFormScreenState extends State<GearFormScreen> {
               const SizedBox(height: 8),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('End Date'),
+                title: const Text('End Date', style: _labelStyle),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -255,7 +255,7 @@ class _GearFormScreenState extends State<GearFormScreen> {
                       _endDate != null
                           ? DateFormat('MMM dd, yyyy').format(_endDate!)
                           : 'Not set',
-                      style: const TextStyle(fontSize: 16),
+                      style: _fieldTextStyle,
                     ),
                     if (_isLoadingLastUse)
                       const Text('Loading last use', style: TextStyle(fontSize: 12, color: Colors.grey))
@@ -269,7 +269,7 @@ class _GearFormScreenState extends State<GearFormScreen> {
                       ),
                   ],
                 ),
-                trailing: const Icon(Icons.calendar_today),
+                trailing: Icon(PhosphorIcons.calendarBlank()),
                 onTap: () async {
                   final picked = await showDatePicker(
                     context: context,
@@ -297,28 +297,58 @@ class _GearFormScreenState extends State<GearFormScreen> {
                     ),
                   );
                 },
-                icon: const Icon(Icons.checklist),
-                label: const Text('Assign to Entries'),
+                icon: Icon(PhosphorIcons.checkSquare()),
+                label: const Text('Assign to Entries', style: TextStyle(fontSize: 13)),
               ),
               const SizedBox(height: 12),
             ],
             
-            FilledButton(
-              onPressed: _isSaving ? null : _saveGear,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+            if (isEditing)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving ? null : _deleteGear,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      child: const Text('Delete Gear', style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _isSaving ? null : _saveGear,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Save Gear', style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                ],
+              )
+            else
+              FilledButton(
+                onPressed: _isSaving ? null : _saveGear,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
                 child: _isSaving
                     ? const SizedBox(
-                        height: 20,
-                        width: 20,
+                        height: 16,
+                        width: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(
-                        isEditing ? 'Update Gear' : 'Add Gear',
-                        style: const TextStyle(fontSize: 16),
-                      ),
+                    : const Text('Add Gear', style: TextStyle(fontSize: 13)),
               ),
-            ),
           ],
         ),
       ),
