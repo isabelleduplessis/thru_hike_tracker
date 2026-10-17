@@ -26,6 +26,7 @@ class _StatsScreenState extends State<StatsScreen> {
   final EntryRepository _entryRepository = EntryRepository();
   final CustomFieldRepository _customFieldRepository = CustomFieldRepository();
   final _settings = SettingsService();
+  late final Future<List<Trip>> _tripsFuture;
 
   bool _isLoading = true;
   Trip? _selectedTrip;
@@ -66,6 +67,7 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   void initState() {
     super.initState();
+    _tripsFuture = _tripRepository.getAllTrips();
     _loadDefaultTrip();
   }
 
@@ -341,25 +343,31 @@ class _StatsScreenState extends State<StatsScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            GestureDetector(
-              onTap: () => setState(() => _progressAsTable = !_progressAsTable),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: () => setState(() => _progressAsTable = false),
+                  child: Icon(
                     _progressAsTable
-                        ? PhosphorIconsRegular.chartBar
+                        ? PhosphorIconsRegular.chartBarHorizontal
+                        : PhosphorIconsBold.chartBarHorizontal,
+                    size: 14,
+                    color: Colors.grey[500],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => setState(() => _progressAsTable = true),
+                  child: Icon(
+                    _progressAsTable
+                        ? PhosphorIconsBold.table
                         : PhosphorIconsRegular.table,
                     size: 14,
                     color: Colors.grey[500],
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _progressAsTable ? 'Bar' : 'Table',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
@@ -382,7 +390,7 @@ class _StatsScreenState extends State<StatsScreen> {
           overallStats.percentage,
           overallStats.coveredWithExtra,
           overallStats.adjustedTotal,
-          'All',
+          'Overall',
         ),
         if (_selectedTrip!.sections.isNotEmpty) ...[
           const SizedBox(height: 4),
@@ -475,7 +483,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
     final rows = <_ProgressRow>[
       _ProgressRow(
-        label: 'All',
+        label: 'Overall',
         color: Theme.of(context).colorScheme.primary,
         stats: overallStats,
         isOverall: true,
@@ -498,11 +506,10 @@ class _StatsScreenState extends State<StatsScreen> {
 
     return Table(
       columnWidths: const {
-        0: FlexColumnWidth(2.2),
-        1: FlexColumnWidth(1.8),
-        2: FlexColumnWidth(1.3),
-        3: FlexColumnWidth(1.3),
-        4: FlexColumnWidth(1.3),
+        0: FlexColumnWidth(1.5),
+        1: FlexColumnWidth(1.5),
+        2: FlexColumnWidth(2.5),
+        3: FlexColumnWidth(1.5),
       },
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
@@ -513,9 +520,8 @@ class _StatsScreenState extends State<StatsScreen> {
           children: [
             Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('Section', style: headerStyle)),
             Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('Progress', style: headerStyle)),
-            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(unitLabel.isNotEmpty ? 'Completed ($unitLabel)' : 'Done', style: headerStyle, textAlign: TextAlign.right)),
+            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(unitLabel.isNotEmpty ? 'Completed / Total ($unitLabel)' : 'Done / Total', style: headerStyle, textAlign: TextAlign.right)),
             Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(unitLabel.isNotEmpty ? 'Remaining ($unitLabel)' : 'Left', style: headerStyle, textAlign: TextAlign.right)),
-            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(unitLabel.isNotEmpty ? 'Total ($unitLabel)' : 'Total', style: headerStyle, textAlign: TextAlign.right)),
           ],
         ),
         ...rows.map((row) {
@@ -586,9 +592,8 @@ class _StatsScreenState extends State<StatsScreen> {
                   },
                 ),
               ),
-              Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(done, style: cellStyle, textAlign: TextAlign.right)),
+              Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('$done / $total', style: cellStyle, textAlign: TextAlign.right)),
               Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(left, style: cellStyle, textAlign: TextAlign.right)),
-              Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(total, style: cellStyle, textAlign: TextAlign.right)),
             ],
           );
         }),
@@ -1079,7 +1084,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildTripSelector() {
     return FutureBuilder<List<Trip>>(
-      future: _tripRepository.getAllTrips(),
+      future: _tripsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
